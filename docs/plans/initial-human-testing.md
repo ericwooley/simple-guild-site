@@ -71,4 +71,22 @@
 - Updated addon identity labels in `1f3e851` so humans can read names and realm values before fixture setup.
 - Checkpoint 1 is complete. Root runtime/configuration changes are ready for their scoped commit.
 - Checkpoint 2 is complete. Integrated browser checks are ready for their scoped commit.
-- Final handoff verification and checkpoint 3 remain pending.
+- Root runtime and setup commit: `6dc0f0c`. Integrated browser check commit: `a412899`.
+- Final inspection found that malformed or sparse bank rows could incorrectly retain complete coverage.
+- The addon regression first failed, then passed after `f02712b` preserved incomplete coverage and later valid rows.
+- Final focused addon checks, all nine bridge checks, and final collector archive matching passed after the correction.
+- Final Node checks passed 29 tests. The separately executed database check also passed.
+- Final browser checks passed all five workflows.
+- Rebuilt the Node server and downloads after the final collector correction.
+- The local settings file retained its exact content and private permissions after repeated setup.
+- All three implementation agents completed their work. LQM used no review agents.
+- Updated the requirements and research pointers to match the implemented test build.
+- Final runtime inspection found that an unset Node mode could permit fixture access.
+- Regression tests failed before `353ff8c` and passed after it required explicit development mode.
+- Focused authentication and isolated database tests passed after that correction.
+- Live development login, member page, logout, and both downloads passed after the correction.
+- Restored clean task-owned fixture records and removed automated-test sessions, grants, and upload receipts.
+- Public asset checks found no configured private credential values in browser assets or downloads.
+- Final document links and the subtitle rule passed.
+- Both registered services remain running for human testing.
+- Checkpoint 3 is complete. The handoff documents are ready for their scoped commit.

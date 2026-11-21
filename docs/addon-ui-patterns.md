@@ -54,6 +54,8 @@ The [connection concept](mockups/addon-connection.svg) shows the chosen window, 
 It uses original vector shapes and system text. It includes no game art, copied logo, font file, or real credential.
 The concept shows an unconfigured addon. Its controls do not execute actions.
 The website retains its existing Arcane theme.
+The initial installable addon now implements these patterns in `addon/HelpingHand/UI.lua`.
+Read [the addon test guide](addon-testing.md) for the working controls and remaining game-client checks.
 
 ## Copied source and integration limits
 

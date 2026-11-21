@@ -9,7 +9,7 @@
 - Use the BetterBags patterns in [the addon UI guide](addon-ui-patterns.md) when building the companion addon's interface.
 - Treat mobile access, accessibility, privacy, and security as standard requirements for every feature.
 - Agents are barred from creating subtitles. Do not add taglines, eyebrow text, or secondary title text.
-- The initial static front page is a foundation. It does not implement the features below yet.
+- Read [the human test guide](human-testing.md) for the current build, setup, and live verification limits.
 
 ## Accounts and characters
 
@@ -90,7 +90,8 @@
 - Show the last successful sync and report sync errors without exposing credentials.
 - Determine supported capture events and export timing through actual Forever client tests.
 - Do not promise real-time synchronization before validating the complete transport path.
-- Choose manual export, a desktop companion, or another supported transport after research and testing.
+- Use the local Python bridge for initial uploads after an explicit capture and game save.
+- Verify game capture and save behavior in Forever before promising automatic synchronization.
 - Keep Battle.net tokens and application secrets on the server.
 - Do not put website credentials or Battle.net tokens in an addon export.
 
@@ -137,7 +138,7 @@ Expiry, revocation, and guild permissions form this project's application requir
 - Define optional shared guild-bank coverage separately from Ultimate Bank's bank-character stock.
 - Decide whether website requests will later sync with Ultimate Bank's request queue.
 - Verify profession and learned-recipe access in the current Forever client.
-- Choose the addon export format and transfer method for JWT-authorized uploads.
+- Verify the version 1 SavedVariables export and local bridge in the current Forever client.
 - Define token lifetime, renewal behavior, secure local storage, and guild-owner verification for the current Forever environment.
 - Define the guild's request approval rules and officer permissions.
 - Define how guild profession titles apply when a member changes mains or leaves the guild.

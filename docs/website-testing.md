@@ -10,7 +10,7 @@ Mode: LQM. The website uses server-rendered routes and server-checked actions.
 6. Open an item's source details and inspect capture time, upload time, and completeness.
 7. Request an item for a verified character.
 8. Check the request status in the guild hall and bank.
-9. Select a main character in My account.
+9. If you configured local alts, select a main character in My account.
 10. Generate a member sync token under Addon Sync.
 11. Copy the token into the addon settings.
 12. Download the bridge from Addon Sync and save it on the game computer.

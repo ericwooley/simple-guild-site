@@ -5,8 +5,9 @@
 The guild uses Ultimate Bank for its bank characters.
 Use its visible inventory as the source for the website bank tab.
 Keep website requests and favorites in PostgreSQL, as the product requirements specify.
-The user selected requirements and source research for this task.
-This document defines a future integration. It adds no working import or copied source.
+The initial test build now implements this boundary in `addon/HelpingHand` and the website sync service.
+Read [the human test guide](human-testing.md) for current setup, coverage, and verification limits.
+This document retains the pinned source research and integration rules.
 
 ## Source evidence
 
