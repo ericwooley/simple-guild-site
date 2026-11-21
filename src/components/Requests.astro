@@ -1,0 +1,8 @@
+---
+import ActionForm from './ActionForm.astro';
+const { requests = [], owner = false } = Astro.props;
+---
+{requests.length ? <div class="record-list">{requests.map(request => <article class="record-row">
+  <div><h3>{request.itemName}</h3><p>{request.quantity} for {request.characterName}</p><p>{request.requesterName} · <span class="badge">{request.status}</span></p></div>
+  {owner && <div class="row-actions">{['approved', 'declined', 'fulfilled'].filter(status => status !== request.status).map(status => <ActionForm action="update-request" label={{approved:'Approve',declined:'Decline',fulfilled:'Mark fulfilled'}[status]} values={{id:request.id,status}} />)}</div>}
+</article>)}</div> : <div class="empty-state compact-empty"><p>No item requests yet.</p><a class="text-link" href="/bank">Browse the bank</a></div>}

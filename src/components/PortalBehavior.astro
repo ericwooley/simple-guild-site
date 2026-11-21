@@ -1,0 +1,44 @@
+<script>
+  document.querySelectorAll<HTMLFormElement>('form[data-action]').forEach((form) => {
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+      const message = form.querySelector<HTMLElement>('.form-message');
+      if (!button || !message || button.disabled) return;
+      const payload: Record<string, unknown> = { action: form.dataset.action };
+      for (const [key, value] of new FormData(form)) {
+        payload[key] = key === 'quantity' ? Number(value) : ['offered', 'assigned'].includes(key) ? value === 'true' : value;
+      }
+      button.disabled = true;
+      form.setAttribute('aria-busy', 'true');
+      message.textContent = 'Saving…';
+      try {
+        const response = await fetch('/api/actions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.message || 'Unable to save. Try again.');
+        message.textContent = result.message || 'Saved.';
+        if (result.token) {
+          const reveal = document.querySelector<HTMLElement>('#token-reveal');
+          const output = document.querySelector<HTMLTextAreaElement>('#new-token');
+          if (reveal && output) { output.value = result.token; reveal.hidden = false; output.focus(); output.select(); }
+          button.disabled = true;
+          return;
+        }
+        if (result.redirect && typeof result.redirect === 'string' && result.redirect.startsWith('/') && !result.redirect.startsWith('//')) location.assign(result.redirect);
+        else location.reload();
+      } catch (error) {
+        message.textContent = error instanceof Error ? error.message : 'Unable to save. Try again.';
+        message.setAttribute('role', 'alert');
+        button.disabled = false;
+      } finally { form.removeAttribute('aria-busy'); }
+    });
+  });
+  document.querySelector<HTMLButtonElement>('#copy-token')?.addEventListener('click', async () => {
+    const output = document.querySelector<HTMLTextAreaElement>('#new-token');
+    const status = document.querySelector<HTMLElement>('#copy-status');
+    if (!output || !status) return;
+    try { await navigator.clipboard.writeText(output.value); status.textContent = 'Copied. Paste this token into the addon settings.'; }
+    catch { output.focus(); output.select(); status.textContent = 'Select and copy the token manually.'; }
+  });
+  window.addEventListener('pagehide', () => { const output = document.querySelector<HTMLTextAreaElement>('#new-token'); if (output) output.value = ''; });
+</script>

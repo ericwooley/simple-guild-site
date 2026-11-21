@@ -1,0 +1,11 @@
+---
+import Layout from '../layouts/Layout.astro';
+import SignInGate from '../components/SignInGate.astro';
+import { getPortalData } from '../server/service.mjs';
+const {account, roster} = await getPortalData(Astro.request);
+const query = Astro.url.searchParams.get('q')?.trim().toLowerCase() || '';
+const members = roster.filter(member => `${member.name} ${member.className} ${member.guildRank} ${member.titles.join(' ')}`.toLowerCase().includes(query));
+---
+<Layout title="Guild roster" account={account}><div class="page-heading"><h1>Guild roster</h1>{account && <span class="badge">{roster.length} characters</span>}</div>
+{!account ? <SignInGate /> : <><form class="filter-bar" method="get"><label>Find a character<input name="q" type="search" value={Astro.url.searchParams.get('q') || ''} /></label><button class="arcane-btn" type="submit">Search</button><a class="text-link" href="/roster">Clear</a></form><div class="character-grid">{members.map(member => <article class="character-card"><div class="character-emblem" aria-hidden="true">{member.name.slice(0,1)}</div><h2>{member.name}</h2><dl><div><dt>Character</dt><dd>Level {member.level} {member.className}</dd></div><div><dt>Realm</dt><dd>{member.realm}</dd></div><div><dt>Guild rank</dt><dd>{member.guildRank || 'Unknown'}</dd></div><div><dt>Account link</dt><dd>{member.verified ? 'Verified' : 'Not verified'}</dd></div><div><dt>Last sync</dt><dd>{member.updatedAt ? new Date(member.updatedAt).toLocaleString('en-US', {timeZone:'UTC'}) + ' UTC' : 'Unknown'}</dd></div></dl><div class="badges">{member.titles.map(title => <span class="badge">{title}</span>)}</div></article>)}</div>{!members.length && <p class="notice">{roster.length ? 'No characters match your search.' : 'The guild owner must sync the roster from the addon.'}</p>}</>}
+</Layout>

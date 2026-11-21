@@ -1,0 +1,9 @@
+---
+const { action, label, values = {}, class: className = '' } = Astro.props;
+---
+<form data-action={action} class={`action-form ${className}`}>
+  {Object.entries(values).map(([name, value]) => <input type="hidden" name={name} value={String(value)} />)}
+  <slot />
+  <button type="submit" class="arcane-btn">{label}</button>
+  <p class="form-message" role="status" aria-live="polite"></p>
+</form>

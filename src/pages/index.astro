@@ -2,32 +2,18 @@
 import Layout from '../layouts/Layout.astro';
 import GuildCrest from '../components/GuildCrest.astro';
 import GuildPanel from '../components/GuildPanel.astro';
-import Icon from '../components/Icon.astro';
+import Requests from '../components/Requests.astro';
+import { getPortalData } from '../server/service.mjs';
+const data = await getPortalData(Astro.request);
+const { account, characters, bank, professions, requests } = data;
 ---
-<Layout>
-  <section class="hero" id="guild-hall" tabindex="-1" aria-labelledby="guild-title">
-    <img class="hero-landscape" src="/guild-landscape.svg" alt="" width="1440" height="600" fetchpriority="high" />
-    <div class="hero-shade" aria-hidden="true"></div>
-    <div class="hero-content">
-      <h1 id="guild-title" class="arcane-title">Band of the<br />Helping Hand</h1>
-      <div class="hero-actions"><a href="#raids" class="arcane-btn">View raids</a><a href="#roster" class="arcane-btn arcane-btn-secondary">View roster</a></div>
-    </div>
-    <div class="hero-standard" aria-hidden="true"><div class="standard-ring"></div><GuildCrest large /></div>
-    <span class="hero-corner top-left" aria-hidden="true"></span><span class="hero-corner top-right" aria-hidden="true"></span><span class="hero-corner bottom-left" aria-hidden="true"></span><span class="hero-corner bottom-right" aria-hidden="true"></span>
-  </section>
-  <div class="section-divider" aria-hidden="true"><span></span><svg width="32" height="20" viewBox="0 0 32 20" fill="none"><path d="m16 3 7 7-7 7-7-7 7-7ZM2 10h7m14 0h7" stroke="currentColor" /></svg><span></span></div>
-  <div class="guild-grid">
-    <GuildPanel id="raids" title="Raids" icon="calendar">
-      <div class="empty-state"><div class="empty-icon"><Icon name="calendar" size={38} /></div><p>No raids scheduled.</p></div>
-    </GuildPanel>
-    <GuildPanel id="notices" title="Guild notices" icon="notice">
-      <div class="empty-state"><div class="empty-icon"><Icon name="notice" size={38} /></div><p>No notices posted.</p></div>
-    </GuildPanel>
-    <GuildPanel id="roster" title="Roster" icon="users">
-      <div class="empty-state compact-empty"><div class="empty-icon"><Icon name="users" size={32} /></div><p>No members added.</p></div>
-    </GuildPanel>
-    <GuildPanel id="guild-bank" title="Guild bank" icon="chest">
-      <div class="empty-state compact-empty"><div class="empty-icon"><Icon name="chest" size={32} /></div><p>No bank entries.</p></div>
-    </GuildPanel>
-  </div>
+<Layout account={account}>
+<section class="hero" aria-labelledby="guild-title"><img class="hero-landscape" src="/guild-landscape.svg" alt="" width="1440" height="600" fetchpriority="high" /><div class="hero-shade" aria-hidden="true"></div>
+<div class="hero-content"><h1 id="guild-title" class="arcane-title">Band of the<br />Helping Hand</h1><div class="hero-actions"><a href={account ? '/bank' : '/login'} class="arcane-btn">{account ? 'Browse the bank' : 'Sign in'}</a><a href={account ? '/account' : '/professions'} class="arcane-btn arcane-btn-secondary">{account ? 'My characters' : 'Professions'}</a></div></div>
+<div class="hero-standard" aria-hidden="true"><div class="standard-ring"></div><GuildCrest large /></div>
+<span class="hero-corner top-left" aria-hidden="true"></span><span class="hero-corner top-right" aria-hidden="true"></span><span class="hero-corner bottom-left" aria-hidden="true"></span><span class="hero-corner bottom-right" aria-hidden="true"></span></section>
+{account ? <>
+<div class="stat-grid"><a class="stat-card" href="/account"><strong>{characters.length}</strong><span>Your characters</span></a><a class="stat-card" href="/bank"><strong>{bank.filter(item => item.favorite).length}</strong><span>Your favorites</span></a><a class="stat-card" href="/professions"><strong>{professions.reduce((count, profession) => count + profession.recipes.filter(recipe => recipe.offered && recipe.canEdit).length, 0)}</strong><span>Your offered crafts</span></a></div>
+<div class="guild-grid"><GuildPanel id="requests" title="Item requests" icon="chest"><Requests requests={requests} owner={account.role === 'owner'} /></GuildPanel><GuildPanel id="characters" title="Your characters" icon="users"><div class="record-list">{characters.map(character => <a class="record-row" href="/account"><div><h3>{character.name}</h3><p>{character.className} · Level {character.level}</p><p>{character.guildRank || 'Guild status unknown'}</p></div>{character.isMain && <span class="badge">Main</span>}</a>)}{!characters.length && <p class="notice">Link verified characters to start your guild profile.</p>}</div><a class="text-link" href="/account">Manage characters and sync</a></GuildPanel></div>
+</> : <div class="feature-grid"><a href="/roster" class="feature-card"><h2>Guild roster</h2></a><a href="/bank" class="feature-card"><h2>Guild bank</h2></a><a href="/professions" class="feature-card"><h2>Professions</h2></a></div>}
 </Layout>

@@ -1,0 +1,8 @@
+---
+import Layout from '../layouts/Layout.astro';
+import ActionForm from '../components/ActionForm.astro';
+import { getPortalData } from '../server/service.mjs';
+const {account, localTestLogin, battleNetConfigured} = await getPortalData(Astro.request);
+---
+<Layout title="Sign in" account={account}><div class="page-heading"><h1>Sign in</h1></div><div class="login-layout"><section class="guild-panel arcane-card-highlight" aria-labelledby="battlenet-heading"><h2 id="battlenet-heading">Battle.net</h2>{account ? <div class="empty-state"><p>You signed in as {account.battleTag}.</p><a class="arcane-btn" href="/account">Open my account</a></div> : battleNetConfigured ? <div class="empty-state"><a class="arcane-btn" href="/auth/battlenet">Continue with Battle.net</a></div> : <div class="empty-state"><p>The site owner must configure Battle.net sign-in before members can connect their accounts.</p></div>}</section>
+{localTestLogin && !account && <section class="guild-panel arcane-card-highlight" aria-labelledby="test-heading"><h2 id="test-heading">Local test accounts</h2><div class="test-account-actions"><ActionForm action="local-login" label="Test as guild member" values={{persona:'member'}} /><ActionForm action="local-login" label="Test as guild owner" values={{persona:'owner'}} /></div><p class="notice">These accounts contain test records for local human testing.</p></section>}</div></Layout>

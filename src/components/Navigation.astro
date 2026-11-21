@@ -1,43 +1,17 @@
 ---
 import GuildCrest from './GuildCrest.astro';
 import Icon from './Icon.astro';
+const { account } = Astro.props;
 const links = [
-  { href: '#guild-hall', label: 'Guild hall', icon: 'home' },
-  { href: '#raids', label: 'Raids', icon: 'calendar' },
-  { href: '#roster', label: 'Roster', icon: 'users' },
-  { href: '#guild-bank', label: 'Guild bank', icon: 'chest' },
-  { href: '#notices', label: 'Notices', icon: 'notice' },
+  { href: '/', label: 'Guild hall', icon: 'home' },
+  { href: '/roster', label: 'Roster', icon: 'users' },
+  { href: '/bank', label: 'Guild bank', icon: 'chest' },
+  { href: '/professions', label: 'Professions', icon: 'notice' },
+  { href: account ? '/account' : '/login', label: account ? 'My account' : 'Sign in', icon: 'users' },
 ] as const;
 ---
-<header class="site-header">
-  <div class="header-inner">
-    <a class="brand" href="#guild-hall" aria-label="Band of the Helping Hand home"><GuildCrest /><span>Band of the<br />Helping Hand</span></a>
-    <nav class="desktop-nav" aria-label="Main navigation">
-      {links.map((link, index) => <a href={link.href} data-nav aria-current={index === 0 ? 'location' : undefined}><Icon name={link.icon} /><span>{link.label}</span></a>)}
-    </nav>
-    <details class="mobile-menu">
-      <summary><Icon name="menu" /><span>Menu</span></summary>
-      <nav aria-label="Mobile navigation">
-        {links.map((link, index) => <a href={link.href} data-nav aria-current={index === 0 ? 'location' : undefined}><Icon name={link.icon} /><span>{link.label}</span></a>)}
-      </nav>
-    </details>
-  </div>
-</header>
-<script>
-  function updateNavigation() {
-    const activeHash = window.location.hash || '#guild-hall';
-    document.querySelectorAll<HTMLAnchorElement>('[data-nav]').forEach((link) => {
-      if (link.hash === activeHash) link.setAttribute('aria-current', 'location');
-      else link.removeAttribute('aria-current');
-    });
-  }
-  document.querySelectorAll<HTMLAnchorElement>('.mobile-menu a').forEach((link) => {
-    link.addEventListener('click', () => {
-      const menu = link.closest('details');
-      if (menu) menu.open = false;
-      document.querySelector<HTMLElement>(link.hash)?.focus({ preventScroll: true });
-    });
-  });
-  window.addEventListener('hashchange', updateNavigation);
-  updateNavigation();
-</script>
+<header class="site-header"><div class="header-inner">
+  <a class="brand" href="/" aria-label="Band of the Helping Hand home"><GuildCrest /><span>Band of the<br />Helping Hand</span></a>
+  <nav class="desktop-nav" aria-label="Main navigation">{links.map(link => <a href={link.href} data-nav aria-current={Astro.url.pathname === link.href ? 'page' : undefined}><Icon name={link.icon} /><span>{link.label}</span></a>)}</nav>
+  <details class="mobile-menu"><summary><Icon name="menu" /><span>Menu</span></summary><nav aria-label="Mobile navigation">{links.map(link => <a href={link.href} data-nav aria-current={Astro.url.pathname === link.href ? 'page' : undefined}><Icon name={link.icon} /><span>{link.label}</span></a>)}</nav></details>
+</div></header>

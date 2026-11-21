@@ -1,0 +1,28 @@
+---
+import Layout from '../layouts/Layout.astro';
+import GuildPanel from '../components/GuildPanel.astro';
+import SignInGate from '../components/SignInGate.astro';
+import ActionForm from '../components/ActionForm.astro';
+import Requests from '../components/Requests.astro';
+import { getPortalData } from '../server/service.mjs';
+const {account, bank, characters, requests} = await getPortalData(Astro.request);
+const q = Astro.url.searchParams.get('q') || '';
+const favorites = Astro.url.searchParams.get('favorites') === '1';
+const source = Astro.url.searchParams.get('source') || '';
+const sourceNames = [...new Set(bank.flatMap(item => item.banks.map(bank => bank.name)))];
+const items = bank.filter(item => `${item.name} ${item.itemId}`.toLowerCase().includes(q.toLowerCase()) && (!favorites || item.favorite) && (!source || item.banks.some(bank => bank.name === source)));
+const eligible = characters.filter(character => character.verified && character.guildRank);
+const date = value => value ? new Date(value).toLocaleString('en-US',{timeZone:'UTC'}) + ' UTC' : 'Unknown';
+---
+<Layout title="Guild bank" account={account}><div class="page-heading"><h1>Guild bank</h1>{account && <span class="badge">{bank.length} item variants</span>}</div>
+{!account ? <SignInGate /> : <>
+<form method="get" class="filter-bar"><label>Find an item<input type="search" name="q" value={q} /></label><label>Bank character<select name="source"><option value="">All bank characters</option>{sourceNames.map(name => <option selected={source === name}>{name}</option>)}</select></label><label class="check-label"><input type="checkbox" name="favorites" value="1" checked={favorites} /> Favorites only</label><button class="arcane-btn" type="submit">Filter</button><a class="text-link" href="/bank">Clear</a></form>
+<div class="bank-grid">{items.map(item => <article class="inventory-card"><div class="item-heading"><div class="item-icon" aria-hidden="true">{item.name.slice(0,1)}</div><h2>{item.name}</h2><strong class="stock-count">{item.count}</strong></div><div class="item-meta"><span>Item {item.itemId}</span>{(item.suffixId !== 0 || item.enchantId !== 0) && <span>Suffix {item.suffixId} · Enchant {item.enchantId}</span>}</div>
+<ActionForm action="favorite" label={item.favorite ? 'Remove favorite' : 'Add favorite'} values={{itemKey:item.itemKey}} class="favorite-action" />
+<details class="bank-sources"><summary>Stock by bank character</summary>{item.banks.map(bank => <dl class="source-details"><div><dt>{bank.name}</dt><dd>{bank.count} · {bank.realm}</dd></div><div><dt>Access</dt><dd>{bank.viewOnly ? 'View only' : 'Requests open'}</dd></div><div><dt>Source scan</dt><dd>{date(bank.observedAt)}</dd></div><div><dt>Website received</dt><dd>{date(bank.receivedAt)}</dd></div><div><dt>Capture</dt><dd>{bank.complete ? 'Complete' : 'Incomplete. Retained stock may remain.'}</dd></div></dl>)}</details>
+{item.banks.some(bank => !bank.viewOnly) && eligible.length ? <details class="request-details"><summary>Request this item</summary><ActionForm action="request-item" label="Send request" values={{itemKey:item.itemKey}}><label>Character<select name="characterId" required>{eligible.map(character => <option value={character.id} selected={character.isMain}>{character.name}</option>)}</select></label><label>Quantity<input name="quantity" type="number" min="1" max={item.count} step="1" value="1" required /></label></ActionForm></details> : <p class="notice">{eligible.length ? 'This stock is view only.' : 'Requests require a verified guild character.'}</p>}
+</article>)}</div>
+{!items.length && <p class="notice">{bank.length ? 'No items match these filters.' : 'The guild owner must sync visible Ultimate Bank stock from the addon.'}</p>}
+<GuildPanel id="requests" title={account.role === 'owner' ? 'Guild requests' : 'Your requests'} icon="chest"><Requests requests={requests} owner={account.role === 'owner'} /></GuildPanel>
+</>}
+</Layout>

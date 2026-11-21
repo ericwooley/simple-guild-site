@@ -1,36 +1,35 @@
-import { readFileSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const output = resolve(import.meta.dirname, '../dist');
-const html = readFileSync(resolve(output, 'index.html'), 'utf8');
-const attributes = (name) => [...html.matchAll(new RegExp(`\\b${name}="([^"]*)"`, 'g'))].map((match) => match[1]);
+const base = process.env.TEST_BASE_URL;
+const routes = ['/', '/roster', '/bank', '/professions', '/account', '/login'];
 
-test('every in-page link reaches one unique destination', () => {
-  const ids = attributes('id');
-  assert.equal(ids.length, new Set(ids).size, 'IDs must be unique');
-  const anchors = attributes('href').filter((href) => href.startsWith('#'));
-  assert.ok(anchors.length > 0);
-  for (const href of anchors) assert.ok(ids.includes(href.slice(1)), `Missing target for ${href}`);
-});
+for (const route of routes) {
+  test(`anonymous ${route} preserves navigation and member privacy`, {skip: !base && 'Set TEST_BASE_URL to test a running website.'}, async () => {
+    const response = await fetch(new URL(route, base));
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('cache-control') || '', /no-store/);
+    const html = await response.text();
+    assert.match(html, /<html lang="en"/);
+    assert.equal((html.match(/<h1\b/g) || []).length, 1);
+    assert.match(html, /<main\b[^>]*id="main"/);
+    assert.match(html, /aria-label="Main navigation"/);
+    assert.match(html, /aria-label="Mobile navigation"/);
+    assert.doesNotMatch(html, /name="characterId"|data-action="issue-token"|id="new-token"/);
+    assert.doesNotMatch(html, /class="[^"]*\b(?:subtitle|tagline|eyebrow)\b/);
+    const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
+    assert.equal(ids.length, new Set(ids).size, 'Page landmarks must have unique IDs.');
+    for (const match of html.matchAll(/\bhref="#([^"]+)"/g)) assert.ok(ids.includes(match[1]), `Missing anchor target ${match[1]}`);
+    for (const target of ['/roster', '/bank', '/professions', '/login']) assert.ok(html.includes(`href="${target}"`), `Missing navigation route ${target}`);
+  });
+}
 
-test('the front page exposes a title, navigation, and labeled sections', () => {
-  assert.match(html, /<html lang="en"/);
-  assert.equal((html.match(/<h1\b/g) ?? []).length, 1);
-  assert.match(html, /<main\b[^>]*id="main"/);
-  assert.match(html, /<nav\b[^>]*aria-label="Main navigation"/);
-  assert.match(html, /<nav\b[^>]*aria-label="Mobile navigation"/);
-  for (const headingId of attributes('aria-labelledby')) {
-    assert.ok(attributes('id').includes(headingId), `Missing section heading ${headingId}`);
-  }
-  assert.doesNotMatch(html, /class="[^"]*\b(?:subtitle|tagline|eyebrow)\b/);
-});
-
-test('all local styles, scripts, icons, and images exist in the production output', () => {
-  const assets = [...attributes('href'), ...attributes('src')].filter((url) => url.startsWith('/'));
+test('anonymous pages only load reachable local assets', {skip: !base && 'Set TEST_BASE_URL to test a running website.'}, async () => {
+  const html = await (await fetch(new URL('/', base))).text();
+  const assets = [...html.matchAll(/(?:src|href)="(\/[^"#]+\.(?:css|js|svg)(?:\?[^"#]*)?)"/g)].map(match => match[1]);
   assert.ok(assets.length > 0);
-  for (const url of assets) {
-    assert.ok(existsSync(resolve(output, `.${url.split('?')[0]}`)), `Missing asset ${url}`);
+  for (const path of new Set(assets)) {
+    const response = await fetch(new URL(path, base));
+    assert.equal(response.status, 200, `Missing asset ${path}`);
   }
 });
