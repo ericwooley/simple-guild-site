@@ -93,6 +93,32 @@
 - Keep Battle.net tokens and application secrets on the server.
 - Do not put website credentials or Battle.net tokens in an addon export.
 
+## Addon sync tokens and permissions
+
+- Add an Addon Sync section to the signed-in member's account area.
+- Let members generate a dedicated sync JWT, copy it, and paste it into the companion addon's settings.
+- Show the token's permissions, expiry, revocation status, and last successful sync.
+- Let members revoke a token and generate a replacement.
+- Treat the JWT as a secret bearer credential. Mask saved tokens and exclude them from logs and shared exports.
+- Keep the configured sync JWT separate from inventory payloads, Battle.net tokens, and website session credentials.
+- Permit member tokens to sync only the member's verified characters, professions, known recipes, and supported personal character data.
+- Require verified guild-owner status before issuing a token with guild sync permission.
+- Permit guild-owner tokens to sync the guild roster, ranks, designated bank-character stock, and available guild profession and recipe snapshots.
+- Apply the same visibility, consent, completeness, freshness, and Ultimate Bank restrictions to guild-owner uploads.
+- Preserve website requests, favorites, offered-craft preferences, and guild profession titles when game snapshots refresh.
+- Sync only data that the addon can access. An owner token does not supply missing member recipes or private inventory.
+- Check current account, character, guild, and owner permissions on every upload.
+- Reject uploads after token revocation, token expiry, or loss of the required permission.
+- Require signed JWTs with an explicit sync audience, issuer, account subject, token identifier, expiry, and permitted scope.
+- Validate signatures, allowed algorithms, required claims, and current server permissions before processing any uploaded records.
+- Give sync tokens no website login, account administration, request approval, or in-game action permissions.
+- Authenticate transfers over HTTPS. Keep the credential outside URLs and the game addon communication channel.
+- Verify the data transfer method separately. Pasting a JWT configures authorization but does not establish network transport.
+- Treat authenticated uploads as untrusted data. A valid token does not prove the truth of submitted game records.
+
+The JWT validation requirements follow [RFC 8725](https://www.rfc-editor.org/rfc/rfc8725.html).
+Expiry, revocation, and guild permissions form this project's application requirements.
+
 ## Source reuse requirements
 
 - Reuse code only when its license permits the intended use and redistribution.
@@ -110,7 +136,8 @@
 - Define optional shared guild-bank coverage separately from Ultimate Bank's bank-character stock.
 - Decide whether website requests will later sync with Ultimate Bank's request queue.
 - Verify profession and learned-recipe access in the current Forever client.
-- Choose the addon export format, transfer method, and upload authorization flow.
+- Choose the addon export format and transfer method for JWT-authorized uploads.
+- Define token lifetime, renewal behavior, secure local storage, and guild-owner verification for the current Forever environment.
 - Define the guild's request approval rules and officer permissions.
 - Define how guild profession titles apply when a member changes mains or leaves the guild.
 
@@ -135,3 +162,7 @@
 10. No workflow requires Discord, and no screen contains subtitles.
 11. The bank tab shows Ultimate Bank's visible stock across designated bank characters without exposing private items.
 12. Repeated bank uploads preserve item variants, source age, stock totals, and view-only restrictions.
+13. A member generates a sync JWT in the account area and configures it in the companion addon.
+14. A member token updates only verified characters within its permitted scope.
+15. A verified guild owner syncs available guild roster, bank, profession, and recipe data within the guild's permissions.
+16. Revoked, expired, or unauthorized tokens cannot change stored data.

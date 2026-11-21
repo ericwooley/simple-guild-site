@@ -72,6 +72,10 @@ The current source does not transmit its local per-source `lastScan` values.
 6. Replace only confirmed source snapshots and preserve incomplete or stale records with their status.
 7. Show combined stock and individual bank characters in the website bank tab.
 
+Use the guild owner's dedicated sync JWT for authorized guild bank uploads.
+Read [sync token requirements](requirements.md#addon-sync-tokens-and-permissions) for token scope, revocation, and server permission checks.
+The JWT authorizes the transfer. It does not supply a game-to-website transport.
+
 Never upload the complete SavedVariables file. It can include private inventory and unrelated addon data.
 Never execute uploaded Lua as an import method.
 Do not interpret an absent bank record as a confirmed empty bank.
