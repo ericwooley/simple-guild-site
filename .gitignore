@@ -6,3 +6,9 @@ dist/
 !.env.example
 *.log
 .DS_Store
+public/downloads/*.zip
+public/downloads/sync-addon.py
+test-results/
+playwright-report/
+__pycache__/
+*.pyc
