@@ -24,12 +24,17 @@ No Forever client is available here. Game behavior still needs human testing.
 11. Select Characters and select Capture my data.
 12. If you own the guild and have guild consent, select Guild and select Capture guild data.
 13. Enter `/reload` to save the capture and token.
-14. Execute the bridge command with your account's saved file path.
+14. Download `http://localhost:4321/downloads/sync-addon.py` to your game computer.
+15. Install Python 3 on the game computer if necessary.
+16. Execute the downloaded bridge with your account's saved file path.
 
 ```sh
-python3 scripts/sync-addon.py --file '/path/to/WTF/Account/ACCOUNT/SavedVariables/HelpingHand.lua' --url http://127.0.0.1:4321 --once
+python3 /path/to/Downloads/sync-addon.py --file '/path/to/WTF/Account/ACCOUNT/SavedVariables/HelpingHand.lua' --url http://127.0.0.1:4321 --once
 ```
 
+The downloaded bridge needs no repository checkout or external Python packages.
+Use your website's HTTPS address when the website runs on another computer.
+Loopback addresses refer to the computer that executes the bridge.
 The bridge reports website acceptance without printing the token or inventory.
 Use the account SavedVariables file. Do not use the addon source file from Interface/AddOns.
 Use the website's test fixture configuration for your real character and guild names during local testing.
@@ -120,3 +125,5 @@ The Lua runner checks syntax with the system Lua 5.4 library.
 It uses simulated game APIs for collector checks. These checks do not establish Forever runtime compatibility.
 The archive contains only the six listed addon source and notice files.
 It excludes tokens, SavedVariables, test data, website code, and upstream dependencies.
+Packaging also copies the exact bridge source to `public/downloads/sync-addon.py`.
+The downloadable bridge stays outside the installable addon archive.

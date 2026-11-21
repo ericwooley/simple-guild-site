@@ -3,6 +3,9 @@ import importlib.util
 import json
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
+import zipfile
 import unittest
 from unittest.mock import patch
 
@@ -68,6 +71,19 @@ class ParserTests(unittest.TestCase):
         self.assertNotIn('ccc', opener.request.full_url)
         self.assertEqual(opener.timeout, 20)
         self.assertIsNone(bridge.NoRedirect().redirect_request(None, None, 302, '', {}, 'https://other.example'))
+
+    def test_package_contains_only_source_and_exact_bridge(self):
+        root = Path(__file__).resolve().parents[1]
+        subprocess.run([sys.executable, str(root / 'scripts/package-addon.py')], check=True, capture_output=True)
+        download = root / 'public/downloads'
+        self.assertEqual((download / 'sync-addon.py').read_bytes(), (root / 'scripts/sync-addon.py').read_bytes())
+        allowed = {'HelpingHand.toc', 'Core.lua', 'Collect.lua', 'UI.lua', 'LICENSE', 'THIRD_PARTY.md'}
+        with zipfile.ZipFile(download / 'HelpingHand.zip') as archive:
+            self.assertEqual(set(archive.namelist()), {'HelpingHand/' + name for name in allowed})
+            for name in allowed:
+                self.assertEqual(archive.read('HelpingHand/' + name), (root / 'addon/HelpingHand' / name).read_bytes())
+        # An exact source allowlist excludes saved tokens and local configuration.
+        self.assertFalse(any(name.endswith(('.env', 'HelpingHand.lua', '.bak')) for name in allowed))
 
     def test_file_size_limit(self):
         with tempfile.TemporaryDirectory() as directory:
