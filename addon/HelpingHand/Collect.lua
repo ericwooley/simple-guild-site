@@ -89,9 +89,22 @@ function H.Banks(guildName, realm, roster)
                 local complete = type(Store) == "table"
                     and H.Call(Store.HasAlt, Store, guildName, member.name) == true
                     and H.Call(Store.IsAltComplete, Store, guildName, member.name) == true
-                local items = {}
-                for _, row in ipairs(rows) do
-                    if type(row) == "table" and H.Plain(row.Hidden) ~= true then
+                local items, indices, largest = {}, {}, 0
+                for index in pairs(rows) do
+                    if integer(index) and index > 0 then
+                        indices[#indices + 1] = index
+                        largest = math.max(largest, index)
+                    else
+                        complete = false
+                    end
+                end
+                if largest ~= #indices then complete = false end
+                table.sort(indices)
+                for _, index in ipairs(indices) do
+                    local row = rows[index]
+                    if type(row) ~= "table" then
+                        complete = false
+                    elseif H.Plain(row.Hidden) ~= true then
                         local id, count = integer(row.ID), integer(row.Count)
                         local info = type(row.Info) == "table" and row.Info or {}
                         local link = text(row.Link) or ""

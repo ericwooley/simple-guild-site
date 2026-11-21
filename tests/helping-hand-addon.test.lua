@@ -56,6 +56,18 @@ assert(calls == 1)
 env.TOGBankClassic_Guild.GetAltItems = function() return {{ID = 118, Count = -1}} end
 assert(H.Capture(true))
 assert(not env.HelpingHandDB.outbox.banks[1].complete)
+env.TOGBankClassic_Guild.GetAltItems = function()
+    return {{ID = 118, Count = 20}, "malformed row"}
+end
+assert(H.Capture(true))
+assert(not env.HelpingHandDB.outbox.banks[1].complete, "Malformed rows must preserve prior stock")
+assert(#env.HelpingHandDB.outbox.banks[1].items == 1)
+env.TOGBankClassic_Guild.GetAltItems = function()
+    return {[1] = {ID = 118, Count = 20}, [3] = {ID = 999, Count = 2}}
+end
+assert(H.Capture(true))
+assert(not env.HelpingHandDB.outbox.banks[1].complete, "Sparse rows must preserve prior stock")
+assert(#env.HelpingHandDB.outbox.banks[1].items == 2, "Keep valid records after a hole")
 env.TOGBankClassic_Guild.GetAltItems = function() return {} end
 assert(H.Capture(true))
 assert(#env.HelpingHandDB.outbox.banks[1].items == 0)
