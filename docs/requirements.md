@@ -33,8 +33,17 @@
 
 ## Guild bank
 
-- Sync bank items and quantities from the companion addon.
+- Use Ultimate Bank (`TOGBankClassic`) as the inventory source for designated bank characters.
+- Sync its visible bank, bag, and mailbox stock through the companion addon into the website bank tab.
+- Support multiple bank characters and retain each character's stock separately.
+- Show combined stock without counting the same source snapshot twice.
+- Keep bank-character stock distinct from any future shared guild-bank tabs.
+- Exclude items that Ultimate Bank marks as private or hidden.
+- Preserve item IDs, signed random suffixes, enchant IDs, quantities, and source bank identities.
+- Respect view-only bank restrictions when accepting requests.
+- Limit imported bank characters to the website's authorized guild scope.
 - Show when bank data last synced and identify incomplete snapshots.
+- Distinguish source capture time from website upload time. An upload does not prove a new scan.
 - Support item search and filters.
 - Let each member keep personal item favorites.
 - Let members request an item and quantity for one of their verified guild characters.
@@ -97,7 +106,9 @@
 ## Decisions that still need evidence
 
 - Verify Battle.net authorization and account-to-character linking for the current Forever APIs.
-- Verify guild bank coverage, bank-tab permissions, and support for designated bank characters.
+- Verify Ultimate Bank readers, bank-character identities, source coverage, and freshness in the current Forever client.
+- Define optional shared guild-bank coverage separately from Ultimate Bank's bank-character stock.
+- Decide whether website requests will later sync with Ultimate Bank's request queue.
 - Verify profession and learned-recipe access in the current Forever client.
 - Choose the addon export format, transfer method, and upload authorization flow.
 - Define the guild's request approval rules and officer permissions.
@@ -122,3 +133,5 @@
 8. Failed or incomplete syncs preserve the last confirmed data and clearly show its age.
 9. All member workflows work on mobile and with a keyboard.
 10. No workflow requires Discord, and no screen contains subtitles.
+11. The bank tab shows Ultimate Bank's visible stock across designated bank characters without exposing private items.
+12. Repeated bank uploads preserve item variants, source age, stock totals, and view-only restrictions.

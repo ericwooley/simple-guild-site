@@ -118,6 +118,11 @@ Never use a display name alone as proof of ownership.
 
 ## Other candidates
 
+Ultimate Bank is the selected source for this guild's bank-character stock.
+Read [Ultimate Bank integration](ultimate-bank-integration.md) before planning bank capture or website imports.
+That research does not change the copied-source inventory above.
+Keep the existing shared-bank readers as separate reference material.
+
 | Candidate | Evidence | Decision |
 | --- | --- | --- |
 | [Guild Finder Forever](https://www.curseforge.com/wow/addons/guild-finder-forever) | MIT, Forever support, 3,009 project downloads on the inspected listing | Recruitment is outside the agreed scope. Copy no source. |
