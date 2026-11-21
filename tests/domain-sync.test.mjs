@@ -91,3 +91,19 @@ test('offer preferences survive a recipe disappearing and later returning',()=>{
   const returned = mergeSnapshot(absent,snapshot({characters:[char]}),new Date(now).toISOString(),'fixture-owner');
   assert.equal(returned.characters[0].professions[0].recipes[0].offered,true);
 });
+test('fixture configuration rejects duplicate character identities across accounts and banks',()=>{
+  assert.throws(()=>fixtureState({ownerCharacter:'Test Member'}));
+  assert.throws(()=>fixtureState({bankCharacters:['TEST MEMBER']}));
+  assert.throws(()=>fixtureState({memberAlts:['Test Member']}));
+  assert.throws(()=>fixtureState({ownerAlts:['Same Name'],memberAlts:['same name']}));
+});
+test('fixture alts remain verified local account characters with one initial main',()=>{
+  const state = fixtureState({ownerAlts:['Owner Alt'],memberAlts:['Member Alt']});
+  assert.equal(state.characters.length,4);
+  const member = state.characters.filter(c=>c.accountId === 'fixture-member');
+  assert.equal(member.length,2);
+  assert.equal(member.filter(c=>c.isMain).length,1);
+  assert.ok(member.every(c=>c.verified));
+  assert.equal(member.find(c=>c.name === 'Member Alt').id,'fixture-member-alt-1');
+  for (const config of [{memberAlts:Array(21).fill('Name')},{ownerAlts:[null]},{memberAlts:['Bad\nName']},{bankCharacters:[' ']},{realm:''},null]) assert.throws(()=>fixtureState(config));
+});

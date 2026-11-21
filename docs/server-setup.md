@@ -44,6 +44,8 @@ It does not establish a verified Forever realm identity.
   "region": "us",
   "ownerCharacter": "Test Owner",
   "memberCharacter": "Test Member",
+  "ownerAlts": ["Owner Alt"],
+  "memberAlts": ["Member Alt"],
   "bankCharacters": ["Test Bank", "Another Bank"]
 }
 ```
@@ -57,6 +59,13 @@ It does not establish a verified Forever realm identity.
 7. Save the addon data through logout or the supported client save action.
 8. Use the bridge instructions to upload the snapshot.
 9. Check the bank, roster, professions, and sync status.
+
+Use at most 20 alts per account and 100 bank characters.
+Use distinct character names across both accounts and the bank list.
+The configuration compares full names without case.
+Each account starts with its primary character as main.
+Use the account page to select an alt as main.
+Omit the alt arrays to retain the default single-character accounts.
 
 These names remain local fixtures.
 The test does not prove Battle.net ownership or real guild-owner status.

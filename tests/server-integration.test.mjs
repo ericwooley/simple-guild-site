@@ -66,6 +66,17 @@ test('PostgreSQL sessions, permissions, tokens, imports, requests, titles and of
     assert.equal(removed.guild,null); assert.deepEqual(removed.bank,[]);
     const expired = signSyncToken({iss:'helping-hand',aud:'helping-hand-sync',sub:'fixture-member',guild:'fixture-guild',jti:'x',scope:'member',iat:1,exp:2});
     await assert.rejects(()=>upload(body,expired));
+    await transaction(db=>seedFixtures(db,{memberAlts:['Member Alt']}));
+    const altData = await getPortalData(req('/account',null,member));
+    assert.equal(altData.characters.length,2);
+    assert.equal(altData.account.testAccount,true);
+    assert.ok(altData.characters.every(c=>c.verified));
+    await act({action:'set-main',characterId:'fixture-member-alt-1'},member);
+    const mainChanged = await getPortalData(req('/account',null,member));
+    assert.equal(mainChanged.characters.length,2);
+    assert.equal(mainChanged.characters.filter(c=>c.isMain).length,1);
+    assert.equal(mainChanged.characters.find(c=>c.isMain).name,'Member Alt');
+    assert.equal(mainChanged.characters.find(c=>c.id === 'fixture-member-character').verified,true);
     process.env.BNET_CLIENT_ID = 'test-client'; process.env.BNET_CLIENT_SECRET = 'test-client-secret'; process.env.BNET_REDIRECT_URI = 'http://localhost:4321/auth/callback';
     const started = await beginBattleNet(req('/auth/start'));
     const state = new URL(started.headers.get('location')).searchParams.get('state');
