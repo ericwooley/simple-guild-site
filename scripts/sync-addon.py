@@ -15,6 +15,11 @@ import urllib.error
 
 MAX_BYTES = 8 * 1024 * 1024
 MAX_NODES = 150000
+SPACE = re.compile(r'(?:\s+|--[^\n]*(?:\n|$))')
+NAME = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
+NAMED_KEY = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\s*=')
+NUMBER = re.compile(r'-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?')
+LITERAL = re.compile(r'(true|false|nil)\b')
 
 
 class BridgeError(ValueError):
@@ -29,7 +34,7 @@ class LuaData:
 
     def space(self):
         while self.pos < len(self.source):
-            match = re.match(r'(?:\s+|--[^\n]*(?:\n|$))', self.source[self.pos:])
+            match = SPACE.match(self.source, self.pos)
             if not match:
                 return
             self.pos += len(match[0])
@@ -47,7 +52,7 @@ class LuaData:
 
     def name(self):
         self.space()
-        match = re.match(r'[A-Za-z_][A-Za-z0-9_]*', self.source[self.pos:])
+        match = NAME.match(self.source, self.pos)
         if not match:
             raise BridgeError('The saved file contains an invalid data name.')
         self.pos += len(match[0])
@@ -110,7 +115,7 @@ class LuaData:
                     self.require('=')
                 else:
                     saved = self.pos
-                    match = re.match(r'([A-Za-z_][A-Za-z0-9_]*)\s*=', self.source[self.pos:])
+                    match = NAMED_KEY.match(self.source, self.pos)
                     if match:
                         key = match[1]
                         self.pos += len(match[0])
@@ -125,11 +130,11 @@ class LuaData:
                     self.require('}')
                     break
             return values
-        for literal, value in [('true', True), ('false', False), ('nil', None)]:
-            if re.match(literal + r'\b', self.source[self.pos:]):
-                self.pos += len(literal)
-                return value
-        match = re.match(r'-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?', self.source[self.pos:])
+        match = LITERAL.match(self.source, self.pos)
+        if match:
+            self.pos = match.end()
+            return {'true': True, 'false': False, 'nil': None}[match[1]]
+        match = NUMBER.match(self.source, self.pos)
         if match:
             self.pos += len(match[0])
             number = float(match[0])
