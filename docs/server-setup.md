@@ -18,7 +18,10 @@ The browser receives no database credentials or Battle.net access tokens.
 
 Bind the local website to `127.0.0.1`.
 The local account action checks the request hostname and connection address.
-Production mode disables fixture accounts and fixture sync tokens.
+Fixture accounts and fixture sync tokens require explicit `NODE_ENV=development`.
+Astro development mode supplies this value.
+Production mode, test mode, and an unset mode disable fixture access.
+Never set development mode on a production server.
 Use HTTPS for external access.
 Do not expose the local fixture build as a production website.
 

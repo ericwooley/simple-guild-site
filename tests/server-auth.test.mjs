@@ -18,7 +18,10 @@ test('local test login requires explicit development mode and loopback hosts and
   assert.equal(localMode(new Request('http://localhost:4321'),'127.0.0.1'),true);
   assert.equal(localMode(new Request('http://localhost:4321'),'192.0.2.1'),false);
   assert.equal(localMode(new Request('https://example.com'),'127.0.0.1'),false);
-  process.env.NODE_ENV = 'production'; assert.equal(localMode(new Request('http://localhost:4321'),'127.0.0.1'),false);
+  for (const mode of ['production','test',undefined]) {
+    mode === undefined ? delete process.env.NODE_ENV : process.env.NODE_ENV = mode;
+    assert.equal(localMode(new Request('http://localhost:4321'),'127.0.0.1'),false);
+  }
   for (const [key,value] of [['ENABLE_LOCAL_TEST_LOGIN',original.enabled],['NODE_ENV',original.node]]) value === undefined ? delete process.env[key] : process.env[key] = value;
 });
 test('cookie actions reject missing or foreign origins and plaintext external access',()=>{

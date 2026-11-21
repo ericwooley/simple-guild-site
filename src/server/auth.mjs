@@ -5,7 +5,7 @@ export const hash = value => createHash('sha256').update(value).digest('hex');
 export const opaque = () => randomBytes(32).toString('base64url');
 export function isLoopback(host) { return ['localhost','127.0.0.1','[::1]','::1','::ffff:127.0.0.1'].includes(host); }
 export function localMode(request, address) {
-  return process.env.ENABLE_LOCAL_TEST_LOGIN === 'true' && process.env.NODE_ENV !== 'production' && isLoopback(new URL(request.url).hostname) && (address === undefined || isLoopback(address));
+  return process.env.ENABLE_LOCAL_TEST_LOGIN === 'true' && process.env.NODE_ENV === 'development' && isLoopback(new URL(request.url).hostname) && (address === undefined || isLoopback(address));
 }
 export function secureTransport(request) {
   const url = new URL(request.url);
