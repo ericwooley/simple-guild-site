@@ -56,10 +56,11 @@ local function tab(name)
         status:SetText(HelpingHandDB.token and "Token configured. Website receipt unknown." or "Token required.")
     elseif name == "Characters" then
         local identity = H.Identity()
-        label(content, identity and identity.name or "Character unavailable", 0, 0)
+        label(content, "Character: " .. (identity and identity.name or "Unavailable"), 0, 0)
+        label(content, "Realm: " .. (identity and identity.realm or "Unavailable"), 0, -28)
         local names = {}
         for _, p in ipairs(H.Professions() or {}) do names[#names + 1] = p.name .. " " .. p.rank .. "/" .. p.maxRank end
-        label(content, #names > 0 and table.concat(names, "\n") or "Open your Skills window to load professions.", 0, -48)
+        label(content, #names > 0 and table.concat(names, "\n") or "Open your Skills window to load professions.", 0, -72)
         button(content, "Capture my data", 0, -184, function() capture(false) end)
         status:SetText("Capture sends only this character. Website verification controls access.")
     else

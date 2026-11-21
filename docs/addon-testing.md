@@ -15,18 +15,20 @@ No Forever client is available here. Game behavior still needs human testing.
 2. Download `http://localhost:4321/downloads/HelpingHand.zip` while the website runs.
 3. Extract the `HelpingHand` folder into the Forever client's `Interface/AddOns` folder.
 4. Enable Helping Hand in the game's addon list.
-5. Sign into the website and open Addon Sync.
-6. Generate the correct member or guild sync token.
-7. Enter `/hh` in the game.
-8. Paste the token into Connection and select Save token.
-9. Open the guild roster and your Skills window.
-10. Open your own profession window to capture its learned recipes.
-11. Select Characters and select Capture my data.
-12. If you own the guild and have guild consent, select Guild and select Capture guild data.
-13. Enter `/reload` to save the capture and token.
-14. Download `http://localhost:4321/downloads/sync-addon.py` to your game computer.
-15. Install Python 3 on the game computer if necessary.
-16. Execute the downloaded bridge with your account's saved file path.
+5. Enter `/hh` and select Characters.
+6. Read the Character and Realm fields before configuring local test identities.
+7. Sign into the website and open Addon Sync.
+8. Generate the correct member or guild sync token.
+9. Enter `/hh` in the game.
+10. Paste the token into Connection and select Save token.
+11. Open the guild roster and your Skills window.
+12. Open your own profession window to capture its learned recipes.
+13. Select Characters and select Capture my data.
+14. If you own the guild and have guild consent, select Guild and select Capture guild data.
+15. Enter `/reload` to save the capture and token.
+16. Download `http://localhost:4321/downloads/sync-addon.py` to your game computer.
+17. Install Python 3 on the game computer if necessary.
+18. Execute the downloaded bridge with your account's saved file path.
 
 ```sh
 python3 /path/to/Downloads/sync-addon.py --file '/path/to/WTF/Account/ACCOUNT/SavedVariables/HelpingHand.lua' --url http://127.0.0.1:4321 --once
