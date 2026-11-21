@@ -37,10 +37,12 @@ The site service uses the absolute Node.js path because the daemon has a separat
 
 ## Scope
 
+Read `docs/requirements.md` for the agreed website and addon requirements.
+
 The first version contains the front page and in-page navigation.
 PostgreSQL runs as a separate local service, ready for future server features.
 The static front page does not connect to PostgreSQL or change guild data.
-Authentication, membership, raid scheduling, and bank transactions require future work.
+Battle.net accounts, roster sync, bank requests, and profession sync require future work.
 
 Execute `pnpm build` to create the static site in `dist/`.
 Execute `pnpm test` after the build to check the generated page and asset links.

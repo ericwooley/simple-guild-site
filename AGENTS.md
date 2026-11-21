@@ -4,6 +4,7 @@
 - Do not add taglines, eyebrow text, or secondary title text beneath or above headings.
 - Use Astro components and the vendored Fantasy RTS Arcane theme.
 - Read `README.md` and `docs/dependencies.md` before changing the project.
+- Read `docs/requirements.md` before planning, implementing, or reviewing website or addon features. Treat it as the product requirements.
 - Keep PostgreSQL access on the server. Never send database credentials to the browser.
 - Keep guild data separate from presentation. Do not present sample records as real guild activity.
 - Use proc-man for long-running services. Declare the directory, tags, and ports.
