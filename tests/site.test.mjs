@@ -33,3 +33,35 @@ test('anonymous pages only load reachable local assets', {skip: !base && 'Set TE
     assert.equal(response.status, 200, `Missing asset ${path}`);
   }
 });
+
+async function renderRequestRows(statuses, owner = true) {
+  const { createRequire } = await import('node:module');
+  const { readFile } = await import('node:fs/promises');
+  const require = createRequire(import.meta.resolve('astro/compiler-runtime'));
+  const { transform } = await import(require.resolve('@astrojs/compiler-rs'));
+  const { experimental_AstroContainer: AstroContainer } = await import('astro/container');
+  async function compile(path) {
+    const result = await transform(await readFile(path, 'utf8'), { filename: path.pathname, resolvePath: (value) => value });
+    let code = result.code.replaceAll('"astro/runtime/server/index.js"', JSON.stringify(import.meta.resolve('astro/runtime/server/index.js')));
+    for (const match of code.matchAll(/from ['"]([^'"]+\.astro)['"]/g)) {
+      code = code.replace(match[0], `from ${JSON.stringify(await compile(new URL(match[1], path)))}`);
+    }
+    return `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
+  }
+  const component = await import(await compile(new URL('../src/components/Requests.astro', import.meta.url)));
+  const container = await AstroContainer.create();
+  return container.renderToString(component.default, { props: { owner, requests: statuses.map(status => ({id:status,itemName:`${status} item`,quantity:1,characterName:'Verified character',requesterName:'Member',status})) } });
+}
+
+test('request rows expose only valid owner actions for their current status', async () => {
+  for (const [status, expected] of Object.entries({pending:['Approve','Decline'], approved:['Decline','Mark fulfilled'], declined:[], fulfilled:[]})) {
+    const html = await renderRequestRows([status]);
+    const buttons = [...html.matchAll(/<button\b[^>]*>([^<]+)<\/button>/g)].map(match => match[1]);
+    assert.deepEqual(buttons.sort(), expected.sort(), `Owner actions for ${status} request`);
+  }
+});
+
+test('member request rows contain no owner status actions', async () => {
+  const html = await renderRequestRows(['pending','approved','declined','fulfilled'], false);
+  assert.doesNotMatch(html, /data-action="update-request"/);
+});
