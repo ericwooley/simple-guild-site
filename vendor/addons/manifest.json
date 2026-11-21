@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "observedOn": "2026-11-20",
+  "downloadScope": "CurseForge project total, not individual-release or Forever-only download counts",
+  "runtimeStatus": "Reference source for adaptation. No installable addon or website integration.",
+  "sources": [
+    {
+      "id": "bank-tabs",
+      "name": "Bank Tabs",
+      "author": "jonlipin (CurseForge: Vatik)",
+      "repository": "https://github.com/jonlipin/bank-tabs",
+      "tag": "2.4.0",
+      "revision": "2e27935aaaa34ae61d9dec094b83bdac1f2f0a55",
+      "projectUrl": "https://www.curseforge.com/wow/addons/bank-tabs",
+      "observedProjectDownloads": 4291,
+      "license": "MIT",
+      "interface": 16001,
+      "compatibilityEvidence": {
+        "upstreamPath": "BankTabs.toc",
+        "upstreamBlob": "7f340fb1606f6f16d494c65e12bcbec72e0a2596",
+        "sourceUrl": "https://github.com/jonlipin/bank-tabs/blob/2e27935aaaa34ae61d9dec094b83bdac1f2f0a55/BankTabs.toc"
+      },
+      "files": [
+        {
+          "localPath": "vendor/addons/bank-tabs/LICENSE",
+          "upstreamPath": "LICENSE",
+          "upstreamBlob": "88657fb71ecf4a7632d8b28c0f7b8232bd0725b0",
+          "upstreamSha256": "1e9269413404cf7bc2ae0fb2dc6f5e91ac4754830d5b2918b82a4326932b5fd7",
+          "sha256": "1e9269413404cf7bc2ae0fb2dc6f5e91ac4754830d5b2918b82a4326932b5fd7",
+          "sourceUrl": "https://github.com/jonlipin/bank-tabs/blob/2e27935aaaa34ae61d9dec094b83bdac1f2f0a55/LICENSE",
+          "copyMode": "full-file"
+        },
+        {
+          "localPath": "vendor/addons/bank-tabs/Vault.lua",
+          "upstreamPath": "Vault.lua",
+          "upstreamBlob": "6a078effd606b50a793c9f4e67794ee6bf9a556d",
+          "upstreamSha256": "2a66221ef5a305addd790bbee95fd28cfd25dbfaf8e9e4bc4c4ba07dcd4b38ef",
+          "sha256": "2a66221ef5a305addd790bbee95fd28cfd25dbfaf8e9e4bc4c4ba07dcd4b38ef",
+          "sourceUrl": "https://github.com/jonlipin/bank-tabs/blob/2e27935aaaa34ae61d9dec094b83bdac1f2f0a55/Vault.lua",
+          "copyMode": "full-file"
+        }
+      ]
+    },
+    {
+      "id": "forever-guild",
+      "name": "Forever Guild",
+      "author": "Diego and contributors (GitHub: Japy01)",
+      "repository": "https://github.com/Japy01/LevelMates",
+      "tag": "v0.9.2",
+      "revision": "5eb0ca61ea09224f3b210c9fb12de8291f2ea78c",
+      "projectUrl": "https://www.curseforge.com/wow/addons/forever-guild",
+      "observedProjectDownloads": 3394,
+      "license": "MIT",
+      "interface": 16001,
+      "compatibilityEvidence": {
+        "upstreamPath": "LevelMates/LevelMates.toc",
+        "upstreamBlob": "920dec0fb81b39df3076f5408a8609b429c4a024",
+        "sourceUrl": "https://github.com/Japy01/LevelMates/blob/5eb0ca61ea09224f3b210c9fb12de8291f2ea78c/LevelMates/LevelMates.toc"
+      },
+      "files": [
+        {
+          "localPath": "vendor/addons/forever-guild/LICENSE",
+          "upstreamPath": "LICENSE",
+          "upstreamBlob": "ceeb44560fa3f34583ed7eaa14fd8fb9b2c52526",
+          "upstreamSha256": "1379ebbd55f94f68fcb295dfb48ad0f664e942a524c86e5923561693f548567b",
+          "sha256": "1379ebbd55f94f68fcb295dfb48ad0f664e942a524c86e5923561693f548567b",
+          "sourceUrl": "https://github.com/Japy01/LevelMates/blob/5eb0ca61ea09224f3b210c9fb12de8291f2ea78c/LICENSE",
+          "copyMode": "full-file"
+        },
+        {
+          "localPath": "vendor/addons/forever-guild/Roster.readers.lua",
+          "upstreamPath": "LevelMates/Roster.lua",
+          "upstreamBlob": "bae0b55b54a743c09e5036ad0ee831f0c9c21064",
+          "upstreamSha256": "f5c03d237eca8ff726e39dce1e9f309fd0e6256dec4cace6198c7e50bda3444b",
+          "sha256": "f350094abb4a6811db3443ef793b5f152e5e0f59b2ebc1f327050b621a57114e",
+          "sourceUrl": "https://github.com/Japy01/LevelMates/blob/5eb0ca61ea09224f3b210c9fb12de8291f2ea78c/LevelMates/Roster.lua",
+          "copyMode": "exact-lines",
+          "lines": {
+            "start": 1,
+            "end": 108
+          }
+        },
+        {
+          "localPath": "vendor/addons/forever-guild/Professions.readers.lua",
+          "upstreamPath": "LevelMates/Professions.lua",
+          "upstreamBlob": "2bc601d963d53d299c36b708bb37f654883955f7",
+          "upstreamSha256": "14c88bc0f54c32cc7721c3a3d34a3dd1ce209afb2313ade67826ea265527b557",
+          "sha256": "639155b459683bf9bfb239f0fda1f5ab26f7b9b9d8f2e4ec5ee4c390921d4b50",
+          "sourceUrl": "https://github.com/Japy01/LevelMates/blob/5eb0ca61ea09224f3b210c9fb12de8291f2ea78c/LevelMates/Professions.lua",
+          "copyMode": "exact-lines",
+          "lines": {
+            "start": 1,
+            "end": 66
+          }
+        },
+        {
+          "localPath": "vendor/addons/forever-guild/Recipes.scan.lua",
+          "upstreamPath": "LevelMates/Recipes.lua",
+          "upstreamBlob": "23f6ad76634d05496a701a7051e152e4c03e80c5",
+          "upstreamSha256": "92cbc6fc6d6e974a5ab0a1079c296b87455b4cbd7928c9abb4e6078247f53f43",
+          "sha256": "6b9272669068eb753db0513407202cb0a776b3c389b9bc755236d892687030a4",
+          "sourceUrl": "https://github.com/Japy01/LevelMates/blob/5eb0ca61ea09224f3b210c9fb12de8291f2ea78c/LevelMates/Recipes.lua",
+          "copyMode": "exact-lines",
+          "lines": {
+            "start": 1,
+            "end": 134
+          }
+        },
+        {
+          "localPath": "vendor/addons/forever-guild/Skills.read.lua",
+          "upstreamPath": "LevelMates/Journal.lua",
+          "upstreamBlob": "cef4e48de241638671d66231408f93651de41815",
+          "upstreamSha256": "42142c04fc110d680b7299bf184629581c1b4f34a2e6371d7efe854d5965d5dc",
+          "sha256": "214e9bb9735b22108812aca1e60db131273bc1c2f048472fbff364dc6d7df68f",
+          "sourceUrl": "https://github.com/Japy01/LevelMates/blob/5eb0ca61ea09224f3b210c9fb12de8291f2ea78c/LevelMates/Journal.lua",
+          "copyMode": "exact-lines",
+          "lines": {
+            "start": 180,
+            "end": 206
+          }
+        },
+        {
+          "localPath": "vendor/addons/forever-guild/GuildBank.lua",
+          "upstreamPath": "LevelMates/GuildBank.lua",
+          "upstreamBlob": "9583f99ad4ce436a52577a6aeb4c7708024eec52",
+          "upstreamSha256": "d71e2a8ecaf9a4b7113f9e8ee4e0605abe11302b3764743b4b46fabfc138d9fc",
+          "sha256": "d71e2a8ecaf9a4b7113f9e8ee4e0605abe11302b3764743b4b46fabfc138d9fc",
+          "sourceUrl": "https://github.com/Japy01/LevelMates/blob/5eb0ca61ea09224f3b210c9fb12de8291f2ea78c/LevelMates/GuildBank.lua",
+          "copyMode": "full-file"
+        }
+      ]
+    }
+  ]
+}

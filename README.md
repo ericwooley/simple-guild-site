@@ -46,6 +46,7 @@ Battle.net accounts, roster sync, bank requests, and profession sync require fut
 
 Execute `pnpm build` to create the static site in `dist/`.
 Execute `pnpm test` after the build to check the generated page and asset links.
+Execute `pnpm test:addon` to check the imported addon readers with the system Lua 5.4 library.
 Execute `pnpm db:shell` to inspect the local database.
 
 ## Licenses
@@ -53,3 +54,4 @@ Execute `pnpm db:shell` to inspect the local database.
 The Arcane theme uses the MIT license in `licenses/fantasy-rts-ui.txt`.
 The site uses original SVG artwork and system fonts.
 See `docs/dependencies.md` for dependency evidence.
+See `docs/addon-reuse.md` for the selected addon sources and their integration limits.

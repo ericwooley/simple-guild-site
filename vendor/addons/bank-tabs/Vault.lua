@@ -1,0 +1,1279 @@
+-- Bank Tabs
+-- Vault: remembering what the bank, the bags and the guild bank hold.
+--
+-- Everything is kept in the account wide saved variables, one entry per character, so that any
+-- character can look at any other's bank and bags, and at any guild bank this account has opened.
+--
+--   chars[who] = { class, level, bank = record, bags = record }
+--   record     = { time, money, containers = { { id, label, slots, items = { {slot, id, ...} } } },
+--                  bagSlots or equipped = the bags themselves, items, slots, free }
+--
+-- Every item is stored with the slot it sat in, so the saved windows can draw it exactly where it
+-- was rather than packing things together.
+--
+-- Two things about this client shape the bank scan:
+--  * the real bank storage is the CharacterBankTab containers. The legacy bank container (-1)
+--    still reports slots but is a ghost, so it is skipped whenever a real tab exists.
+--  * container ids move between builds, so the list of bank containers is worked out from
+--    Enum.BagIndex at run time rather than being hardcoded.
+
+local ADDON, ns = ...
+
+local report = ns.report
+local Vault = {}
+ns.Vault = Vault
+
+local MAX_GUILD_TAB_SLOTS = 98
+local NUM_BANK_BAG_SLOTS = 7
+local NUM_BAGS = 4
+
+-- ------------------------------------------------------------------
+-- Container API, old and new
+-- ------------------------------------------------------------------
+
+local function NumSlots(bag)
+	if C_Container and C_Container.GetContainerNumSlots then
+		local ok, n = pcall(C_Container.GetContainerNumSlots, bag)
+		if ok and type(n) == "number" then return n end
+		return 0
+	end
+	if GetContainerNumSlots then
+		local ok, n = pcall(GetContainerNumSlots, bag)
+		if ok and type(n) == "number" then return n end
+	end
+	return 0
+end
+
+local function ItemName(link)
+	if type(link) ~= "string" then return nil end
+	local name = link:match("%[(.-)%]")
+	if name and name ~= "" then return name end
+	local getter = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+	if getter then
+		local ok, itemName = pcall(getter, link)
+		if ok and itemName then return itemName end
+	end
+	return nil
+end
+Vault.ItemName = ItemName
+
+local function ContainerItem(bag, slot)
+	if C_Container and C_Container.GetContainerItemInfo then
+		local ok, info = pcall(C_Container.GetContainerItemInfo, bag, slot)
+		if not ok or type(info) ~= "table" then return nil end
+		return {
+			slot = slot,
+			icon = info.iconFileID,
+			count = info.stackCount or 1,
+			quality = info.quality,
+			link = info.hyperlink,
+			id = info.itemID,
+			name = ItemName(info.hyperlink),
+		}
+	end
+	if GetContainerItemInfo then
+		local ok, icon, count, _, quality, _, _, link = pcall(GetContainerItemInfo, bag, slot)
+		if not ok or not icon then return nil end
+		return {
+			slot = slot,
+			icon = icon,
+			count = count or 1,
+			quality = quality,
+			link = link,
+			id = link and tonumber(tostring(link):match("item:(%d+)")) or nil,
+			name = ItemName(link),
+		}
+	end
+	return nil
+end
+
+local function ReagentBagIndex()
+	if type(Enum) == "table" and type(Enum.BagIndex) == "table" then
+		local id = Enum.BagIndex.ReagentBag
+		if type(id) == "number" then return id end
+	end
+	return nil
+end
+
+-- The inventory slot a container hangs off, which is how the bag item itself (its icon and link)
+-- is found.
+local function InventoryIDFor(bag)
+	local getter = (C_Container and C_Container.ContainerIDToInventoryID) or ContainerIDToInventoryID
+	if not getter then return nil end
+	local ok, id = pcall(getter, bag)
+	if ok and type(id) == "number" then return id end
+	return nil
+end
+
+local function InventoryItem(inv)
+	if not inv then return nil, nil end
+	local icon, link
+	if GetInventoryItemTexture then
+		local ok, value = pcall(GetInventoryItemTexture, "player", inv)
+		if ok then icon = value end
+	end
+	if GetInventoryItemLink then
+		local ok, value = pcall(GetInventoryItemLink, "player", inv)
+		if ok then link = value end
+	end
+	return icon, link
+end
+
+-- Reads one container into a bucket, every item keeping its slot number.
+local function ScanContainer(id, label, slots)
+	local bucket = { id = id, label = label, slots = slots, items = {} }
+	for slot = 1, slots do
+		local item = ContainerItem(id, slot)
+		if item then bucket.items[#bucket.items + 1] = item end
+	end
+	return bucket
+end
+
+-- ------------------------------------------------------------------
+-- The store
+-- ------------------------------------------------------------------
+
+-- Everything that reads the snapshots is told when one changes: every saved window that is open
+-- redraws, the backpack's tabs brighten or dim, and the tooltip index is thrown away to be rebuilt
+-- on the next hover.
+function Vault.Changed()
+	if ns.Tooltips and ns.Tooltips.Invalidate then pcall(ns.Tooltips.Invalidate) end
+	if ns.VaultUI and ns.VaultUI.Refresh then pcall(ns.VaultUI.Refresh) end
+	if ns.BagHeader and ns.BagHeader.Refresh then pcall(ns.BagHeader.Refresh) end
+end
+
+-- ------------------------------------------------------------------
+-- Which characters and guild banks are shown
+-- ------------------------------------------------------------------
+
+-- Everything saved stays saved until it is deleted, but not all of it has to be on show. A
+-- character or guild bank can be hidden (entry.hidden, from the Characters page of the options),
+-- and every character and guild bank on another realm can be left out at once (the otherRealms
+-- setting switched off). What is not shown has no tab on the saved windows, no line on item
+-- tooltips and no share of the account's gold. The character being played, and its guild's bank,
+-- are always shown.
+
+local function ThisRealm()
+	if not GetRealmName then return nil end
+	local ok, realm = pcall(GetRealmName)
+	if ok and type(realm) == "string" and realm ~= "" then return realm end
+	return nil
+end
+
+-- The realm a character was saved on: kept with the entry, or the tail of a key saved by name
+-- before characters were keyed by GUID ("Name - Realm"). Nil when neither says.
+function Vault.RealmOf(key, entry)
+	if type(entry) == "table" and type(entry.realm) == "string" and entry.realm ~= "" then return entry.realm end
+	if type(key) == "string" and not key:find("^Player%-") then
+		local realm = key:match("^.- %- (.+)$")
+		if realm and realm ~= "" then return realm end
+	end
+	return nil
+end
+
+-- Whether something saved on `realm` is on another realm than the one being played. A realm that
+-- is not known counts as this one, so nothing disappears for want of a name.
+local function Elsewhere(realm)
+	local here = ThisRealm()
+	return realm ~= nil and here ~= nil and realm ~= here
+end
+
+local function OtherRealmsShown()
+	return not (ns.db and ns.db.vault and ns.db.vault.otherRealms == false)
+end
+
+function Vault.CharShown(who, entry)
+	if who == ns.Who() then return true end
+	if type(entry) ~= "table" then return false end
+	if entry.hidden then return false end
+	if not OtherRealmsShown() and Elsewhere(Vault.RealmOf(who, entry)) then return false end
+	return true
+end
+
+-- A guild bank is keyed "Guild - Realm".
+function Vault.GuildShown(key, record)
+	if Vault.GuildKey and key == Vault.GuildKey() then return true end
+	if type(record) == "table" and record.hidden then return false end
+	if not OtherRealmsShown() and Elsewhere(type(key) == "string" and key:match("^.- %- (.+)$") or nil) then return false end
+	return true
+end
+
+-- Hides or shows a character ("char") or a guild bank ("guild") without touching what is saved.
+function Vault.SetHidden(kind, key, hidden)
+	local entry
+	if kind == "char" then
+		if key == ns.Who() then return false end
+		entry = Vault.CharRecord(key)
+	elseif kind == "guild" then
+		entry = ns.vault.guilds[key]
+	end
+	if type(entry) ~= "table" then return false end
+	entry.hidden = hidden and true or nil
+	Vault.Changed()
+	return true
+end
+
+-- Everything saved, shown or not, for the Characters page: one block per realm, the realm being
+-- played first and the rest by name, each with its characters and its guild banks by name.
+--   { realm = "Name" or false, here = bool, chars = { { who, entry, mine, shown } }, guilds = { { key, record, mine, shown } } }
+function Vault.Roster()
+	local here = ThisRealm()
+	local blocks, byRealm = {}, {}
+	local function Block(realm)
+		realm = realm or here or false
+		local block = byRealm[realm]
+		if not block then
+			block = { realm = realm, here = (realm == here) or realm == false, chars = {}, guilds = {} }
+			byRealm[realm] = block
+			blocks[#blocks + 1] = block
+		end
+		return block
+	end
+	local me = ns.Who()
+	local mineSeen = false
+	for who in pairs(ns.vault.chars or {}) do
+		local entry = Vault.CharRecord(who)
+		if entry then
+			local block = Block(who == me and here or Vault.RealmOf(who, entry))
+			block.chars[#block.chars + 1] = { who = who, entry = entry, mine = who == me, shown = Vault.CharShown(who, entry) }
+			if who == me then mineSeen = true end
+		end
+	end
+	local myGuild = Vault.GuildKey and Vault.GuildKey()
+	for key, record in pairs(ns.vault.guilds or {}) do
+		if type(record) == "table" then
+			local block = Block(type(key) == "string" and key:match("^.- %- (.+)$") or nil)
+			block.guilds[#block.guilds + 1] = { key = key, record = record, mine = key == myGuild, shown = Vault.GuildShown(key, record) }
+		end
+	end
+	for _, block in ipairs(blocks) do
+		table.sort(block.chars, function(a, b)
+			if a.mine ~= b.mine then return a.mine end
+			return ns.Label(a.who) < ns.Label(b.who)
+		end)
+		table.sort(block.guilds, function(a, b) return a.key < b.key end)
+	end
+	table.sort(blocks, function(a, b)
+		if a.here ~= b.here then return a.here end
+		return tostring(a.realm) < tostring(b.realm)
+	end)
+	return blocks, mineSeen
+end
+
+-- Gold: every character's last seen money (this character's live), and the account total. The
+-- freshest of a character's bank and bags snapshots is the one trusted.
+function Vault.Gold()
+	local me = ns.Who()
+	local out, total = {}, 0
+	for who in pairs(ns.vault.chars or {}) do
+		-- Through the table rather than the local, which is declared further down this file.
+		local entry = Vault.CharRecord(who)
+		if entry then
+			local best
+			for _, kind in ipairs({ "bank", "bags" }) do
+				local record = entry[kind]
+				if record and type(record.money) == "number" and (not best or (record.time or 0) > (best.time or 0)) then
+					best = record
+				end
+			end
+			if best and Vault.CharShown(who, entry) then
+				out[#out + 1] = { who = who, money = best.money, time = best.time, mine = who == me }
+			end
+		end
+	end
+	-- This character's purse is read live and replaces whatever was saved.
+	if GetMoney then
+		local ok, money = pcall(GetMoney)
+		if ok and type(money) == "number" then
+			local found
+			for _, row in ipairs(out) do
+				if row.who == me then row.money, row.time, found = money, time(), true end
+			end
+			if not found then out[#out + 1] = { who = me, money = money, time = time(), mine = true } end
+		end
+	end
+	table.sort(out, function(a, b)
+		if a.mine ~= b.mine then return a.mine end
+		return a.money > b.money
+	end)
+	for _, row in ipairs(out) do total = total + row.money end
+	return out, total
+end
+
+-- 1.0.x kept the bank record itself under the character's name. That shape is lifted into the
+-- `bank` field the first time it is seen, so nothing already saved is lost.
+local function Migrate(who, entry)
+	if type(entry) ~= "table" then return nil end
+	if entry.containers and not entry.bank then
+		local bank = entry
+		entry = { class = bank.class, level = bank.level, bank = bank }
+		bank.class, bank.level = nil, nil
+		ns.vault.chars[who] = entry
+	end
+	return entry
+end
+
+function Vault.CharRecord(who, create)
+	local entry = Migrate(who, ns.vault.chars[who])
+	if not entry and create then
+		entry = {}
+		ns.vault.chars[who] = entry
+	end
+	return entry
+end
+
+local function StampCharacter(entry)
+	if UnitClass then
+		local ok, _, token = pcall(UnitClass, "player")
+		if ok and token then entry.class = token end
+	end
+	if UnitLevel then
+		local ok, level = pcall(UnitLevel, "player")
+		if ok and type(level) == "number" then entry.level = level end
+	end
+	-- The display name (first name and surname) and realm travel with the entry; the key is the GUID.
+	local name = ns.PlayerName()
+	if name then entry.name = name end
+	if GetRealmName then
+		local ok, realm = pcall(GetRealmName)
+		if ok and type(realm) == "string" then entry.realm = realm end
+	end
+	if UnitGUID then
+		local ok, guid = pcall(UnitGUID, "player")
+		if ok and type(guid) == "string" and guid ~= "" then entry.guid = guid end
+	end
+	-- The guild, so a guild's tab can say which characters are in it. Early in a session the client
+	-- knows a character is in a guild before it knows the guild's name, which is no reason to forget
+	-- the name saved before; only a character in no guild at all loses it.
+	local guild = Vault.GuildKey and Vault.GuildKey()
+	if guild then
+		entry.guild = guild
+	elseif IsInGuild then
+		local ok, inGuild = pcall(IsInGuild)
+		if ok and inGuild == false then entry.guild = nil end
+	end
+end
+
+-- Snapshots taken before 1.2.1 were keyed by name, and the name this client hands back has been
+-- seen to change between logins, which left one character with two entries. Anything stored under
+-- a name that matches this character on this realm is folded into the entry keyed by GUID, the
+-- newer record of each kind winning, and the old key dropped.
+local function AdoptLegacy(who, entry)
+	if not (entry.name and who:find("^Player%-")) then return 0 end
+	local first = entry.name:match("^(%S+)")
+	local realm = entry.realm or ""
+	local adopted = 0
+	for key, raw in pairs(ns.vault.chars) do
+		if key ~= who and type(key) == "string" and not key:find("^Player%-") and type(raw) == "table" then
+			local old = Migrate(key, raw)
+			local oldName, oldRealm = key:match("^(.-) %- (.*)$")
+			oldName = oldName or key
+			oldRealm = oldRealm or ""
+			if old and oldName:match("^(%S+)") == first and oldRealm == realm then
+				for _, kind in ipairs({ "bank", "bags" }) do
+					if old[kind] and (not entry[kind] or (old[kind].time or 0) > (entry[kind].time or 0)) then
+						entry[kind] = old[kind]
+					end
+				end
+				entry.class = entry.class or old.class
+				entry.level = entry.level or old.level
+				ns.vault.chars[key] = nil
+				adopted = adopted + 1
+			end
+		end
+	end
+	if adopted > 0 then report["legacy records adopted"] = adopted .. " folded into this character's entry" end
+	return adopted
+end
+
+-- Whether a bank layout, measured now or saved by any version, describes a real grid of slots: four
+-- or more columns of slots of a sensible size, each at least a slot from the next and not absurdly
+-- far. Before 2.0.1 the measurement could come out one column wide (a stray button of a slot's size
+-- above the grid was read as a first row of one), and the saved banks were then drawn as a single
+-- column of items for every character; a layout like that is never drawn, kept or let stand in the
+-- way of a real one.
+local function Number(value)
+	return type(value) == "number" and value == value
+end
+
+local function PlausibleLayout(layout)
+	if type(layout) ~= "table" then return false end
+	local cell, pitchX, pitchY, cols = layout.cell, layout.pitchX, layout.pitchY, layout.cols
+	if not (Number(cell) and Number(pitchX) and Number(pitchY) and Number(layout.originX) and Number(layout.originY)) then
+		return false
+	end
+	if cell < 16 or cell > 64 then return false end
+	if pitchX < cell or pitchX > cell * 3 or pitchY < cell or pitchY > cell * 3 then return false end
+	if cols ~= nil and not (Number(cols) and cols >= 4 and cols <= 24) then return false end
+	return true
+end
+Vault.PlausibleLayout = PlausibleLayout
+
+-- Sorted positions within two units of each other count as one, the first of each run standing for
+-- the run.
+local function Runs(values)
+	table.sort(values)
+	local runs, i = {}, 1
+	while i <= #values do
+		local j = i
+		while values[j + 1] and values[j + 1] - values[i] <= 2 do j = j + 1 end
+		runs[#runs + 1] = values[i]
+		i = j + 1
+	end
+	return runs
+end
+
+-- The grid of slots among the buttons of one size: the longest run of rows lying one under another
+-- at a single spacing from the same left edge, each holding as many slots as most rows do, the last
+-- allowed fewer. Anything else that size is left out rather than read as a row of its own: another
+-- addon's button above the grid, say, or the sort button while the bank is still filling in.
+-- Returns the grid's rows (each left to right), the number of columns and how many buttons were
+-- that size; nil when they make no grid of two rows or more.
+local function FindGrid(buttons, size)
+	local members, ys = {}, {}
+	for _, b in ipairs(buttons) do
+		if math.abs(b.w - size) <= 1 then
+			members[#members + 1] = b
+			ys[#ys + 1] = b.y
+		end
+	end
+	local rows = {}
+	for index, y in ipairs(Runs(ys)) do rows[index] = { y = y } end
+	for _, b in ipairs(members) do
+		for _, row in ipairs(rows) do
+			if math.abs(b.y - row.y) <= 2 then row[#row + 1] = b break end
+		end
+	end
+
+	-- A full row holds as many slots as most rows do, the longer on a tie.
+	local counts, cols, best = {}, 0, 0
+	for _, row in ipairs(rows) do
+		table.sort(row, function(a, b) return a.x < b.x end)
+		counts[#row] = (counts[#row] or 0) + 1
+	end
+	for length, n in pairs(counts) do
+		if n > best or (n == best and length > cols) then cols, best = length, n end
+	end
+	if cols < 2 then return nil end
+
+	-- A row holding more than that has a stray in it too, and keeps the slots that line up with a
+	-- full row.
+	local reference
+	for _, row in ipairs(rows) do
+		if #row == cols then reference = row break end
+	end
+	for index, row in ipairs(rows) do
+		if #row > cols then
+			local kept = { y = row.y }
+			for _, b in ipairs(row) do
+				for _, slot in ipairs(reference) do
+					if math.abs(b.x - slot.x) <= 2 then kept[#kept + 1] = b break end
+				end
+			end
+			rows[index] = kept
+		end
+	end
+
+	local grid
+	for start, row in ipairs(rows) do
+		if #row == cols and rows[start + 1] then
+			local pitch = rows[start + 1].y - row.y
+			local run = { row }
+			for index = start + 1, #rows do
+				local nextRow, above = rows[index], run[#run]
+				if #above ~= cols or #nextRow == 0 or #nextRow > cols then break end
+				if math.abs(nextRow.y - above.y - pitch) > 2 or math.abs(nextRow[1].x - row[1].x) > 2 then break end
+				run[#run + 1] = nextRow
+			end
+			if #run >= 2 and (not grid or #run > #grid) then grid = run end
+		end
+	end
+	if not grid then return nil end
+	return grid, cols, #members
+end
+
+-- The real bank's geometry, read off the live window while it is open: where its slot grid sits,
+-- how far apart the slots are, the window's size, and the Bag Slots row. The replica lays itself
+-- out from these numbers, so it matches this client's bank exactly rather than a guess. Every
+-- number is in the bank window's own units, relative to its top left corner. Nil when the window
+-- holds no grid of slots to measure, as in the moment before this client makes the bank's slots.
+local function MeasureBankLayout()
+	local frame = _G.BankFrame
+	if not (frame and frame.IsShown and frame:IsShown()) then return nil end
+	local fl, fb, fw, fh = ns.Windows.Measure(frame)
+	if not fl or not fw or fw <= 0 then return nil end
+	local ratio = ns.Windows.Ratio(frame)
+	local ftop = fb + fh
+
+	-- Every square button of a slot's size on screen inside the window. On screen, not just shown:
+	-- a button in a hidden part of the window still says it is shown.
+	local buttons = {}
+	ns.WalkChildren(frame, function(child)
+		local okType, kind = pcall(child.GetObjectType, child)
+		if not okType or not (kind == "Button" or kind == "ItemButton" or kind == "CheckButton") then return end
+		local okShown, shown = pcall(child.IsVisible or child.IsShown, child)
+		if okShown and not shown then return end
+		local l, b, w, h = ns.Windows.Measure(child)
+		if not l or not w or not h or w < 16 or w > 64 or math.abs(w - h) > 4 then return end
+		buttons[#buttons + 1] = { x = (l - fl) * ratio, y = (ftop - (b + h)) * ratio, w = w * ratio, h = h * ratio }
+	end, 6, 2000)
+	if #buttons < 8 then
+		report["bank layout"] = "not measured: " .. #buttons .. " slot sized buttons found"
+		return nil
+	end
+
+	-- The sizes from the commonest down, the larger first on a tie (the slots are bigger than the
+	-- Bag Slots); the first whose buttons make a grid is the slot size.
+	local counts, order = {}, {}
+	for _, b in ipairs(buttons) do
+		local size = math.floor(b.w + 0.5)
+		if not counts[size] then counts[size], order[#order + 1] = 0, size end
+		counts[size] = counts[size] + 1
+	end
+	table.sort(order, function(a, b)
+		if counts[a] ~= counts[b] then return counts[a] > counts[b] end
+		return a > b
+	end)
+	local grid, cols, members, cell
+	for _, size in ipairs(order) do
+		if counts[size] < 8 then break end
+		grid, cols, members = FindGrid(buttons, size)
+		if grid then cell = size break end
+	end
+	if not grid then
+		report["bank layout"] = "not measured: no grid of slots among " .. #buttons .. " slot sized buttons"
+		return nil
+	end
+	local first, slots = grid[1], 0
+	for _, row in ipairs(grid) do slots = slots + #row end
+	local layout = {
+		width = fw * ratio, height = fh * ratio,
+		cell = cell, cols = cols, rows = #grid, slots = slots,
+		pitchX = (first[cols].x - first[1].x) / (cols - 1),
+		pitchY = grid[2][1].y - first[1].y,
+		originX = first[1].x, originY = first[1].y,
+	}
+	-- How many slots the bank shows a page at a time, where it pages (88 on this client).
+	local panel = frame.BankPanel
+	local perPage = type(panel) == "table" and panel.maximumTotalSlotsPerPage
+	if type(perPage) == "number" and perPage >= cols then layout.perPage = perPage end
+
+	-- The Bag Slots: one row of smaller buttons under the grid.
+	local gridBottom = grid[#grid][1].y + cell
+	local below = {}
+	for _, b in ipairs(buttons) do
+		if b.y > gridBottom and b.w < cell - 1 then below[#below + 1] = b end
+	end
+	table.sort(below, function(a, b)
+		if math.abs(a.y - b.y) > 2 then return a.y < b.y end
+		return a.x < b.x
+	end)
+	local bagRow = {}
+	for _, b in ipairs(below) do
+		if #bagRow == 0 or math.abs(bagRow[1].y - b.y) <= 2 then bagRow[#bagRow + 1] = b end
+	end
+	if #bagRow >= 4 then
+		layout.bagCount = #bagRow
+		layout.bagCell = math.floor(bagRow[1].w + 0.5)
+		layout.bagPitch = (bagRow[2] and (bagRow[2].x - bagRow[1].x)) or (layout.bagCell + 14)
+		layout.bagOriginX = bagRow[1].x
+		layout.bagOriginY = bagRow[1].y
+	end
+
+	for key, value in pairs(layout) do layout[key] = math.floor(value * 10 + 0.5) / 10 end
+	if not PlausibleLayout(layout) then
+		report["bank layout"] = "not measured: the slots found make no bank grid (" .. layout.cols .. " columns of "
+			.. cell .. ", pitch " .. layout.pitchX .. " by " .. layout.pitchY .. ")"
+		return nil
+	end
+	local strays = members - slots
+	report["bank layout"] = layout.cols .. " columns of " .. cell .. ", pitch " .. layout.pitchX .. " by " .. layout.pitchY
+		.. ", grid at " .. layout.originX .. "," .. layout.originY .. ", window " .. layout.width .. " by " .. layout.height
+		.. (layout.bagCount and (", " .. layout.bagCount .. " bag slots of " .. layout.bagCell) or ", bag slots not found")
+		.. (strays > 0 and (", " .. strays .. " other button" .. (strays == 1 and "" or "s") .. " of that size left out") or "")
+	return layout
+end
+Vault.MeasureBankLayout = MeasureBankLayout
+
+local function Totals(record)
+	record.items, record.slots, record.free = 0, 0, 0
+	for _, bucket in ipairs(record.containers) do
+		record.items = record.items + #bucket.items
+		record.slots = record.slots + bucket.slots
+		record.free = record.free + (bucket.slots - #bucket.items)
+	end
+end
+
+-- Every character with something saved, this one first, then alphabetical.
+-- The characters on show (see Vault.CharShown) with a snapshot of `kind`, or with anything saved
+-- when no kind is given: this character first, then by name.
+function Vault.Characters(kind)
+	local me = ns.Who()
+	local out = {}
+	for who, raw in pairs(ns.vault.chars or {}) do
+		local entry = Migrate(who, raw)
+		if entry and (not kind or entry[kind]) and Vault.CharShown(who, entry) then
+			out[#out + 1] = { who = who, entry = entry, mine = who == me }
+		end
+	end
+	table.sort(out, function(a, b)
+		if a.mine ~= b.mine then return a.mine end
+		return ns.Label(a.who) < ns.Label(b.who)
+	end)
+	return out
+end
+
+-- ------------------------------------------------------------------
+-- Which containers make up the bank
+-- ------------------------------------------------------------------
+
+-- When more than one enum name shares a container id, the more specific name wins the label, so
+-- the same container is not "Bank bag 1" one login and "Bank tab 1" the next.
+local NAME_PRIORITY = { CharacterBankTab = 4, Bank = 3, Reagentbank = 2, Bankbag = 1, BankBag = 1 }
+
+local function PrettyBagName(name, id)
+	local tab = name:match("^CharacterBankTab_?(%d+)$")
+	if tab then return "Bank tab " .. tab end
+	tab = name:match("^AccountBankTab_?(%d+)$")
+	if tab then return "Account tab " .. tab end
+	tab = name:match("^Bankbag_?(%d+)$") or name:match("^BankBag_?(%d+)$")
+	if tab then return "Bank bag " .. tab end
+	if name:lower() == "reagentbank" then return "Reagent bank" end
+	if name:lower() == "bank" then return "Bank" end
+	return name .. " (" .. id .. ")"
+end
+
+local function NamePriority(name)
+	for prefix, priority in pairs(NAME_PRIORITY) do
+		if name:sub(1, #prefix) == prefix then return priority end
+	end
+	return 0
+end
+
+-- Every container that belongs to the bank, in a sensible order, with only the ones that actually
+-- have slots right now.
+function Vault.BankContainers()
+	local byID = {}
+	local hasCharacterTab = false
+
+	if type(Enum) == "table" and type(Enum.BagIndex) == "table" then
+		for name, id in pairs(Enum.BagIndex) do
+			-- Characterbanktab and Accountbanktab hold the bags put in the Bag Slots, not the bank's
+			-- contents (see TabBagSlots).
+			if type(name) == "string" and type(id) == "number" and name:lower():find("bank")
+				and name ~= "Characterbanktab" and name ~= "Accountbanktab" then
+				local current = byID[id]
+				if not current or NamePriority(name) > current.priority then
+					byID[id] = { id = id, label = PrettyBagName(name, id), priority = NamePriority(name), raw = name }
+				end
+				if name:find("CharacterBankTab") and NumSlots(id) > 0 then hasCharacterTab = true end
+			end
+		end
+	end
+
+	local candidates = {}
+	for _, entry in pairs(byID) do candidates[#candidates + 1] = entry end
+
+	if #candidates == 0 then
+		-- No enum to read, so fall back to the container ids the classic client uses.
+		candidates[#candidates + 1] = { id = -1, label = "Bank" }
+		candidates[#candidates + 1] = { id = -3, label = "Reagent bank" }
+		for i = 5, 11 do candidates[#candidates + 1] = { id = i, label = "Bank bag " .. (i - 4) } end
+	end
+
+	table.sort(candidates, function(a, b)
+		if a.id < 0 and b.id >= 0 then return true end
+		if b.id < 0 and a.id >= 0 then return false end
+		if a.id < 0 and b.id < 0 then return a.id > b.id end
+		return a.id < b.id
+	end)
+
+	local out = {}
+	for _, entry in ipairs(candidates) do
+		-- The legacy bank container is a ghost once the real tabs exist: it reports slots but the
+		-- client refuses every drop into it, so it has nothing worth saving.
+		local ghost = hasCharacterTab and entry.id == -1
+		local slots = NumSlots(entry.id)
+		if slots > 0 and not ghost then
+			out[#out + 1] = { id = entry.id, label = entry.label, slots = slots }
+		end
+	end
+	return out
+end
+
+-- Whether this client's bank window lays every bank tab out as one grid, the main tab's slots
+-- first and each further tab's after them, a page of 88 at a time (C_Bank.ShouldUsePlayerBagsInBank,
+-- as WoW Forever's own bank asks it).
+function Vault.OneGrid()
+	if not (C_Bank and C_Bank.ShouldUsePlayerBagsInBank) then return false end
+	local ok, yes = pcall(C_Bank.ShouldUsePlayerBagsInBank)
+	return ok and yes == true
+end
+
+-- The bag in a Bag Slot: read as a container slot, the way the game's own tooltip reads it, or
+-- through its item location where that read has nothing.
+local function BagInSlot(container, slot)
+	local bag = ContainerItem(container, slot)
+	if bag and bag.icon then return bag.icon, bag.link end
+	if not (ItemLocation and ItemLocation.CreateFromBagAndSlot and C_Item and C_Item.DoesItemExist and C_Item.GetItemIcon) then
+		return nil, nil
+	end
+	local okLocation, location = pcall(ItemLocation.CreateFromBagAndSlot, ItemLocation, container, slot)
+	if not (okLocation and location) then return nil, nil end
+	local okHas, has = pcall(C_Item.DoesItemExist, location)
+	if not (okHas and has) then return nil, nil end
+	local okIcon, icon = pcall(C_Item.GetItemIcon, location)
+	local link
+	if C_Item.GetItemLink then
+		local okLink, value = pcall(C_Item.GetItemLink, location)
+		if okLink then link = value end
+	end
+	return okIcon and icon or nil, link
+end
+
+-- On this client a Bag Slot is a bank tab: buying the first Bag Slot buys tab 2, and the bag put in
+-- it gives that tab its slots. The bag itself sits in a container of its own,
+-- Enum.BagIndex.Characterbanktab, at the slot numbered like its tab: 2 for the first Bag Slot. That
+-- is how the game's own Bag Slot buttons read it (BankItemButtonBagMixin). Nil on a client that
+-- keeps its bank bags the classic way, as inventory slots.
+local function TabBagSlots()
+	local BagIndex = type(Enum) == "table" and Enum.BagIndex
+	if not (type(BagIndex) == "table" and type(BagIndex.Characterbanktab) == "number"
+		and type(BagIndex.CharacterBankTab_1) == "number") then
+		return nil
+	end
+	if not (C_Bank and C_Bank.FetchMaxNumBankTabs and C_Bank.FetchPurchasedBankTabData) then return nil end
+	local bankType = (type(Enum.BankType) == "table" and Enum.BankType.Character) or 0
+	local okMax, max = pcall(C_Bank.FetchMaxNumBankTabs, bankType)
+	local okData, data = pcall(C_Bank.FetchPurchasedBankTabData, bankType)
+	if not (okMax and type(max) == "number" and max > 1 and okData and type(data) == "table") then return nil end
+	local bought = {}
+	for _, tab in ipairs(data) do
+		if type(tab) == "table" and type(tab.ID) == "number" then bought[tab.ID] = true end
+	end
+	local slots, purchased = {}, 0
+	for tabNumber = 2, max do
+		local id = BagIndex.CharacterBankTab_1 + tabNumber - 1
+		-- A tab with slots was bought, whatever the tab list says once the client has let it go.
+		local size = NumSlots(id)
+		local isBought = bought[id] or size > 0
+		local icon, link = BagInSlot(BagIndex.Characterbanktab, tabNumber)
+		if isBought then purchased = purchased + 1 end
+		slots[#slots + 1] = {
+			tab = tabNumber,
+			id = isBought and id or nil,
+			icon = icon,
+			link = link,
+			slots = isBought and size or 0,
+			purchased = isBought,
+		}
+	end
+	slots.purchased = purchased
+	slots.tabs = true
+	return slots
+end
+Vault.TabBagSlots = TabBagSlots
+
+-- The Bag Slots along the bottom of the bank window: which are purchased, which hold a bag, and
+-- which container each bag opens as. Read as bank tabs where the client has them (TabBagSlots),
+-- as inventory slots the classic way otherwise.
+local function BankBagSlots(measured)
+	local tabs = TabBagSlots()
+	if tabs then return tabs end
+	local slots = {}
+	-- This client's bank has more Bag Slots than the classic seven, so the count comes from the
+	-- measured window when there is one, the game's own constant otherwise.
+	local count = math.max(measured or 0, tonumber(_G.NUM_BANKBAGSLOTS) or 0, NUM_BANK_BAG_SLOTS)
+	local purchased
+	if GetNumBankSlots then
+		local ok, count = pcall(GetNumBankSlots)
+		if ok and type(count) == "number" then purchased = count end
+	end
+
+	-- Any container that could be one of these bags, matched to its slot by the inventory id it
+	-- hangs off. Going through the forward function avoids guessing at an offset. The bank's own
+	-- tabs are never candidates, whatever inventory id the client answers for them, or a tab could
+	-- be filed as a bag and the main grid would come up empty.
+	local tabs = { [-1] = true, [-3] = true }
+	if type(Enum) == "table" and type(Enum.BagIndex) == "table" then
+		for name, id in pairs(Enum.BagIndex) do
+			if type(name) == "string" and type(id) == "number"
+				and (name:find("CharacterBankTab") or name:find("AccountBankTab") or name == "Bank" or name == "Reagentbank") then
+				tabs[id] = true
+			end
+		end
+	end
+	local containersByInv = {}
+	for id = 5, 17 do
+		if not tabs[id] then
+			local inv = InventoryIDFor(id)
+			if inv then containersByInv[inv] = id end
+		end
+	end
+
+	for i = 1, count do
+		local inv
+		if BankButtonIDToInvSlotID then
+			local ok, value = pcall(BankButtonIDToInvSlotID, i, 1)
+			if ok and type(value) == "number" then inv = value end
+		end
+		local icon, link = InventoryItem(inv)
+		-- A container is only filed under a slot that actually holds a bag.
+		local id = (icon and inv) and containersByInv[inv] or nil
+		slots[i] = {
+			inv = inv,
+			icon = icon,
+			link = link,
+			id = id,
+			slots = id and NumSlots(id) or 0,
+			purchased = (purchased and i <= purchased) or icon ~= nil or false,
+		}
+	end
+	slots.purchased = purchased
+	return slots
+end
+
+-- ------------------------------------------------------------------
+-- Taking a bank snapshot
+-- ------------------------------------------------------------------
+
+local function BankIsOpen()
+	local frame = _G.BankFrame
+	if frame and frame.IsShown and frame:IsShown() then return true end
+	return Vault.bankOpen and true or false
+end
+Vault.BankIsOpen = BankIsOpen
+
+function Vault.SnapshotBank(reason)
+	if not ns.vault then return nil end
+	local containers = Vault.BankContainers()
+	if #containers == 0 then
+		report["bank scan"] = "no bank containers reported any slots"
+		return nil
+	end
+
+	local record = { time = time(), reason = reason, money = GetMoney and GetMoney() or nil, containers = {} }
+	for _, container in ipairs(containers) do
+		record.containers[#record.containers + 1] = ScanContainer(container.id, container.label, container.slots)
+	end
+	local who = ns.Who()
+	local entry = Vault.CharRecord(who, true)
+	StampCharacter(entry)
+	AdoptLegacy(who, entry)
+	local previous = entry.bank
+
+	-- The window can only be measured while it is up. By "bank closed" the game has already hidden
+	-- it, so the last good measurement is carried forward rather than dropped, and a partial one
+	-- (fewer slots than before) never replaces a full one. The freshest measurement is also kept
+	-- for the account, for characters whose bank was saved before the window was ever measured. A
+	-- saved layout that is no grid (see PlausibleLayout) counts for nothing here.
+	local layout = MeasureBankLayout()
+	local prior = previous and PlausibleLayout(previous.layout) and previous.layout or nil
+	local account = PlausibleLayout(ns.vault.bankLayout) and ns.vault.bankLayout or nil
+	if layout and prior and (layout.slots or 0) < (prior.slots or 0) then layout = nil end
+	record.layout = layout or prior or account
+	if layout then ns.vault.bankLayout = layout end
+	record.bagSlots = BankBagSlots(record.layout and record.layout.bagCount)
+	-- A bag's icon cannot always be read (by "bank closed" the client may have let it go), so a
+	-- bought Bag Slot of the same size keeps the bag it had.
+	local before = previous and previous.bagSlots
+	if record.bagSlots.tabs and type(before) == "table" and before.tabs then
+		for i, slot in ipairs(record.bagSlots) do
+			local old = before[i]
+			if slot.purchased and not slot.icon and type(old) == "table" and old.icon and old.slots == slot.slots then
+				slot.icon, slot.link = old.icon, old.link
+			end
+		end
+	end
+	record.oneGrid = Vault.OneGrid()
+	Totals(record)
+
+	-- Once the bank has closed the client can let go of its contents; an empty read then must not
+	-- replace a real one.
+	if reason == "bank closed" and previous and (previous.items or 0) > 0 and record.items == 0 then
+		report["bank scan"] = "bank closed with nothing readable, kept the earlier snapshot"
+		return previous
+	end
+	entry.bank = record
+
+	report["bank scan"] = record.items .. " items in " .. #record.containers .. " containers ("
+		.. tostring(reason) .. ")"
+	Vault.Changed()
+	return record
+end
+
+-- ------------------------------------------------------------------
+-- Taking a bags snapshot
+-- ------------------------------------------------------------------
+
+-- The bags are always to hand, so this runs at login, when they settle after a change, and at
+-- logout, which is what lets another character look at what this one is carrying.
+function Vault.SnapshotBags(reason)
+	if not ns.vault then return nil end
+	local record = { time = time(), reason = reason, money = GetMoney and GetMoney() or nil, containers = {}, equipped = {} }
+
+	local ids = { 0 }
+	for i = 1, NUM_BAGS do ids[#ids + 1] = i end
+	local reagent = ReagentBagIndex()
+	if reagent then ids[#ids + 1] = reagent end
+
+	for _, id in ipairs(ids) do
+		local slots = NumSlots(id)
+		local label = (id == 0 and "Backpack") or (id == reagent and "Reagent bag") or ("Bag " .. id)
+		if slots > 0 then
+			record.containers[#record.containers + 1] = ScanContainer(id, label, slots)
+		end
+		if id ~= 0 then
+			local icon, link = InventoryItem(InventoryIDFor(id))
+			record.equipped[#record.equipped + 1] = { id = id, icon = icon, link = link, slots = slots, reagent = id == reagent }
+		end
+	end
+	Totals(record)
+
+	local who = ns.Who()
+	local entry = Vault.CharRecord(who, true)
+	local previous = entry.bags
+
+	-- A read with no backpack is the game having emptied its bag information, which this client
+	-- does by the time PLAYER_LOGOUT fires: every character's bags, and with them its gold, were
+	-- being saved as empty on the way out, over the good copy taken in play. A live backpack always
+	-- has slots, so such a read never replaces what was saved. Nor does a logout read with fewer
+	-- bag slots than the last snapshot (no bag can be swapped while logging out), and a logout read
+	-- of no gold keeps the gold last seen.
+	local refuse
+	if NumSlots(0) == 0 then
+		refuse = "the game reported no backpack"
+	elseif reason == "logout" and previous and (previous.slots or 0) > (record.slots or 0) then
+		refuse = "fewer bag slots than the last snapshot"
+	end
+	if refuse then
+		report["bags scan"] = (previous and ("kept the " .. tostring(previous.reason or "earlier") .. " snapshot") or "nothing saved")
+			.. " (" .. refuse .. ", " .. tostring(reason) .. ")"
+		return previous
+	end
+	if reason == "logout" and previous and record.money == 0 and type(previous.money) == "number" and previous.money > 0 then
+		record.money = previous.money
+	end
+
+	StampCharacter(entry)
+	AdoptLegacy(who, entry)
+	entry.bags = record
+
+	report["bags scan"] = record.items .. " items in " .. #record.containers .. " bags (" .. tostring(reason) .. ")"
+	Vault.Changed()
+	return record
+end
+
+-- ------------------------------------------------------------------
+-- Taking a guild bank snapshot
+-- ------------------------------------------------------------------
+
+local function GuildKey()
+	if not GetGuildInfo then return nil end
+	local ok, name = pcall(GetGuildInfo, "player")
+	if not ok or not name or name == "" then return nil end
+	local realm = GetRealmName and GetRealmName() or ""
+	if realm ~= "" then return name .. " - " .. realm end
+	return name
+end
+Vault.GuildKey = GuildKey
+
+local function GuildBankIsOpen()
+	local frame = _G.GuildBankFrame
+	if frame and frame.IsShown and frame:IsShown() then return true end
+	return Vault.guildOpen and true or false
+end
+Vault.GuildBankIsOpen = GuildBankIsOpen
+
+local function ScanGuildTab(tab)
+	if not GetGuildBankItemInfo then return nil end
+	local info = { tab = tab, items = {} }
+	if GetGuildBankTabInfo then
+		local ok, name, icon, viewable = pcall(GetGuildBankTabInfo, tab)
+		if ok then
+			info.name = name
+			info.icon = icon
+			info.viewable = viewable
+		end
+	end
+	if info.viewable == false then return info end
+
+	for slot = 1, MAX_GUILD_TAB_SLOTS do
+		local ok, texture, count, _, _, quality = pcall(GetGuildBankItemInfo, tab, slot)
+		if ok and texture then
+			local link
+			if GetGuildBankItemLink then
+				local gotLink, value = pcall(GetGuildBankItemLink, tab, slot)
+				if gotLink then link = value end
+			end
+			info.items[#info.items + 1] = {
+				slot = slot,
+				icon = texture,
+				count = count or 1,
+				quality = quality,
+				link = link,
+				id = link and tonumber(tostring(link):match("item:(%d+)")) or nil,
+				name = ItemName(link),
+			}
+		end
+	end
+	return info
+end
+
+-- A tab this character's rank cannot view comes back empty, which says nothing about what is in
+-- it. Whatever a character who could view it saved is kept; only its name and icon follow the
+-- game. Returns whether the tab was replaced.
+local function StoreGuildTab(record, tab, info)
+	local old = record.tabs[tab]
+	if info.viewable == false and old and type(old.items) == "table" and #old.items > 0 then
+		old.name = info.name or old.name
+		old.icon = info.icon or old.icon
+		return false
+	end
+	record.tabs[tab] = info
+	return true
+end
+
+-- The server only hands over one tab at a time and only after it has been asked for, so the walk
+-- asks for each tab in turn and reads it a moment later. The tab the user was looking at is put
+-- back at the end.
+function Vault.SnapshotGuildBank(reason)
+	if not ns.vault then return nil end
+	local key = GuildKey()
+	if not key then
+		report["guild bank scan"] = "no guild"
+		return nil
+	end
+	if not GetNumGuildBankTabs then
+		report["guild bank scan"] = "the guild bank API is not on this client"
+		return nil
+	end
+
+	local ok, tabs = pcall(GetNumGuildBankTabs)
+	if ok and tabs == 0 then
+		-- The guild bank opened with no tabs to show (none bought, or none handed over to this
+		-- character). That is worth saving too, so the saved guild bank stops asking for it to be
+		-- opened; tabs saved before are kept.
+		local saved = ns.vault.guilds[key]
+		if not (saved and type(saved.tabs) == "table" and next(saved.tabs)) then
+			ns.vault.guilds[key] = { time = time(), reason = reason, tabs = {}, items = 0, noTabs = true }
+			Vault.Changed()
+		end
+	end
+	if not ok or not tabs or tabs == 0 then
+		report["guild bank scan"] = "no tabs reported"
+		return nil
+	end
+
+	local current
+	if GetCurrentGuildBankTab then
+		local gotTab, value = pcall(GetCurrentGuildBankTab)
+		if gotTab then current = value end
+	end
+
+	local record = ns.vault.guilds[key] or {}
+	record.time = time()
+	record.reason = reason
+	record.tabs = record.tabs or {}
+	record.noTabs = nil
+	if GetGuildBankMoney then
+		local gotMoney, money = pcall(GetGuildBankMoney)
+		if gotMoney then record.money = money end
+	end
+	ns.vault.guilds[key] = record
+
+	for tab = 1, tabs do
+		local delay = 0.5 * (tab - 1)
+		ns.After(delay, function()
+			if QueryGuildBankTab then pcall(QueryGuildBankTab, tab) end
+		end)
+		ns.After(delay + 0.4, function()
+			local info = ScanGuildTab(tab)
+			if info then
+				StoreGuildTab(record, tab, info)
+				record.items = 0
+				for _, bucket in pairs(record.tabs) do record.items = record.items + #bucket.items end
+				report["guild bank scan"] = record.items .. " items over " .. tabs .. " tabs (" .. tostring(reason) .. ")"
+				Vault.Changed()
+			end
+		end)
+	end
+
+	if current and SetCurrentGuildBankTab then
+		ns.After(0.5 * tabs + 0.5, function() pcall(SetCurrentGuildBankTab, current) end)
+	end
+	return record
+end
+
+-- ------------------------------------------------------------------
+-- Manual snapshots and housekeeping
+-- ------------------------------------------------------------------
+
+function Vault.SnapshotNow()
+	local done = {}
+	local bags = Vault.SnapshotBags("asked for")
+	if bags then done[#done + 1] = bags.items .. " items in your bags" end
+	if BankIsOpen() then
+		local record = Vault.SnapshotBank("asked for")
+		if record then done[#done + 1] = record.items .. " items in the bank" end
+	end
+	if GuildBankIsOpen() then
+		local record = Vault.SnapshotGuildBank("asked for")
+		if record then done[#done + 1] = "the guild bank is being read tab by tab" end
+	end
+	if #done == 0 then
+		return "nothing to save: open the bank or the guild bank first, then try again."
+	end
+	return "saved " .. table.concat(done, " and ") .. "."
+end
+
+-- Deletes everything saved for a character ("char") or a guild bank ("guild"). The character being
+-- played is never deleted: its bags would only be saved again a few seconds later.
+function Vault.Forget(kind, key)
+	if kind == "char" then
+		if key == ns.Who() then return false end
+		ns.vault.chars[key] = nil
+	elseif kind == "guild" then
+		ns.vault.guilds[key] = nil
+	end
+	Vault.Changed()
+	return true
+end
+
+-- ------------------------------------------------------------------
+-- Events
+-- ------------------------------------------------------------------
+
+-- Bank changes arrive one slot at a time, so the scan waits for the storm to pass.
+local bankPending = false
+local function QueueBankScan(reason)
+	if bankPending or not BankIsOpen() then return end
+	bankPending = true
+	ns.After(0.4, function()
+		bankPending = false
+		if BankIsOpen() then Vault.SnapshotBank(reason) end
+	end)
+end
+
+-- The bags change constantly in play, so their scan is held back a few seconds at a time.
+local bagsPending = false
+local function QueueBagsScan(reason)
+	if bagsPending then return end
+	bagsPending = true
+	ns.After(3, function()
+		bagsPending = false
+		Vault.SnapshotBags(reason)
+	end)
+end
+
+function Vault.OnEvent(event, ...)
+	if event == "PLAYER_LOGIN" then
+		ns.After(3, function() Vault.SnapshotBags("login") end)
+
+	elseif event == "PLAYER_LOGOUT" then
+		-- No timers run once this fires, so the bags are read on the spot.
+		Vault.SnapshotBags("logout")
+
+	elseif event == "PLAYER_MONEY" then
+		-- Gold changes without the bags always changing (a quest reward, the mail, repairs), and
+		-- the logout read cannot be trusted for it, so the saved purse follows it as it happens.
+		local entry = Vault.CharRecord(ns.Who())
+		if entry and entry.bags and GetMoney then
+			local ok, money = pcall(GetMoney)
+			if ok and type(money) == "number" then
+				entry.bags.money = money
+				Vault.Changed()
+			end
+		end
+
+	elseif event == "BANKFRAME_OPENED" then
+		Vault.bankOpen = true
+		if ns.db.vault.autoBank then
+			-- The container sizes are not filled in the instant the window opens.
+			ns.After(0.3, function() if BankIsOpen() then Vault.SnapshotBank("bank opened") end end)
+		end
+
+	elseif event == "BANKFRAME_CLOSED" then
+		if ns.db.vault.autoBank and Vault.bankOpen then Vault.SnapshotBank("bank closed") end
+		Vault.bankOpen = false
+
+	elseif event == "PLAYERBANKSLOTS_CHANGED" or event == "PLAYERBANKBAGSLOTS_CHANGED"
+		or event == "PLAYERREAGENTBANKSLOTS_CHANGED" then
+		if ns.db.vault.autoBank then QueueBankScan("bank changed") end
+
+	elseif event == "BAG_UPDATE_DELAYED" then
+		if ns.db.vault.autoBank and BankIsOpen() then QueueBankScan("bags settled") end
+		QueueBagsScan("bags changed")
+
+	elseif event == "GUILDBANKFRAME_OPENED" then
+		Vault.guildOpen = true
+		if ns.db.vault.autoGuild then
+			ns.After(0.5, function() if GuildBankIsOpen() then Vault.SnapshotGuildBank("guild bank opened") end end)
+		end
+
+	elseif event == "GUILDBANKFRAME_CLOSED" then
+		Vault.guildOpen = false
+
+	elseif event == "GUILDBANKBAGSLOTS_CHANGED" then
+		if not (ns.db.vault.autoGuild and GuildBankIsOpen()) then return end
+		-- Only the tab on screen is refreshed here; the full walk happens when the window opens.
+		local tab
+		if GetCurrentGuildBankTab then
+			local ok, value = pcall(GetCurrentGuildBankTab)
+			if ok then tab = value end
+		end
+		if not tab then return end
+		local key = GuildKey()
+		local record = key and ns.vault.guilds[key]
+		if not record then return end
+		local info = ScanGuildTab(tab)
+		if info then
+			StoreGuildTab(record, tab, info)
+			record.time = time()
+			Vault.Changed()
+		end
+	end
+end
+
+function Vault.Init()
+	for who, raw in pairs(ns.vault.chars) do Migrate(who, raw) end
+	-- Bags saved as empty by the logout read that is now refused (see SnapshotBags; Casement did
+	-- it too). A live backpack always has slots, so a record with none says nothing, and dropping
+	-- it lets that character's gold fall back to its bank's copy until it logs in again.
+	local dropped = 0
+	for _, entry in pairs(ns.vault.chars) do
+		local bags = type(entry) == "table" and entry.bags
+		if type(bags) == "table" and (bags.slots or 0) == 0
+			and (type(bags.containers) ~= "table" or #bags.containers == 0) then
+			entry.bags = nil
+			dropped = dropped + 1
+		end
+	end
+	if dropped > 0 then report["empty bag snapshots dropped"] = dropped end
+	-- Bank layouts that are no grid, measured before 2.0.1 (see PlausibleLayout). Without them the
+	-- saved banks are drawn from the account's layout or the classic bank's until the bank is next
+	-- opened and measured again.
+	local badLayouts = 0
+	for _, entry in pairs(ns.vault.chars) do
+		local bank = type(entry) == "table" and entry.bank
+		if type(bank) == "table" and bank.layout ~= nil and not PlausibleLayout(bank.layout) then
+			bank.layout = nil
+			badLayouts = badLayouts + 1
+		end
+	end
+	if ns.vault.bankLayout ~= nil and not PlausibleLayout(ns.vault.bankLayout) then
+		ns.vault.bankLayout = nil
+		badLayouts = badLayouts + 1
+	end
+	if badLayouts > 0 then report["bank layouts dropped"] = badLayouts .. " that were not a grid" end
+	local chars, guilds = 0, 0
+	for _ in pairs(ns.vault.chars) do chars = chars + 1 end
+	for _ in pairs(ns.vault.guilds) do guilds = guilds + 1 end
+	report["vault holds"] = chars .. " characters, " .. guilds .. " guild banks"
+	report["container api"] = (C_Container and C_Container.GetContainerItemInfo) and "C_Container"
+		or (GetContainerItemInfo and "classic globals" or "none found")
+	report["guild bank api"] = GetGuildBankItemInfo and "ok" or "not on this client"
+	report["bank bag slots api"] = (C_Bank and C_Bank.FetchPurchasedBankTabData and "bank tabs (C_Bank)")
+		or (BankButtonIDToInvSlotID and "BankButtonIDToInvSlotID") or "not on this client"
+	report["bank shape"] = Vault.OneGrid() and "one grid of every bank tab" or "one tab at a time"
+end

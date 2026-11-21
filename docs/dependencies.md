@@ -50,3 +50,8 @@ Checked on 2026-11-20.
   Review future updates before replacing the vendored file.
 - Source SHA-256: `13553c2be94219746a68e4e7720904903200773f20399643dda3ae4c105accf4`.
 - The local copy removes trailing spaces. It otherwise matches the source.
+
+## Addon source snapshots
+
+Read `docs/addon-reuse.md` for the source selection, licenses, adoption evidence, and integration boundaries.
+The copied source in `vendor/addons/` adds no active website or addon runtime dependency.

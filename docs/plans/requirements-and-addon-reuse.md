@@ -35,8 +35,25 @@
 ## Progress
 
 - Checkpoint 1 complete. Recorded accounts, characters, roster, bank requests, favorites, profession titles, recipes, and sync requirements.
+- Checkpoint 1 commit: `eb65c15`.
 - Preserved the Discord exclusion and subtitle ban. Recorded open decisions and acceptance criteria.
 - Verified that both `AGENTS.md` and `README.md` reference the requirements file.
 - Inspected the documentation changes. `git diff --check` passed.
 - Candidate research found MIT addons above the project-download threshold for bank capture and guild data.
-- Checkpoint 2 is in progress.
+- Checkpoint 2 complete.
+- Source inspection found Discord UI calls in the full recipe module.
+  Copy only the recipe reader and related data sections. Do not import Discord code.
+- Keep upstream snapshots as adaptation material without an installable addon entry point.
+  A later implementation task must add the addon lifecycle, export transport, and server validation.
+- Copied eight source and license files from Bank Tabs 2.4.0 and Forever Guild v0.9.2.
+- Bank Tabs had 4,291 project downloads on the inspected page. Forever Guild had 3,394.
+- Verified MIT licenses, Interface 16001 declarations, source owners, release revisions, Git blobs, and file hashes.
+- Recorded source boundaries, dependencies, stale-data behavior, input validation limits, and excluded candidates.
+- Added offline provenance checks and controlled reader behavior checks without adding a package dependency.
+- `pnpm test` passed all five checks, including the three existing site checks.
+- `pnpm test:addon` passed syntax checks for six Lua files and all five reader behavior checks.
+- No game client is available. In-game capture and end-to-end synchronization remain unverified.
+- LQM remains active. No review agents ran.
+- Inspected the complete file inventory, source provenance, authored changes, and repository status.
+- `git diff --cached --check` passed. The imported Lua contains no Discord module references.
+- All intended changes are ready for the second scoped commit.
