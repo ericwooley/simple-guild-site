@@ -6,6 +6,7 @@
 - Keep the website independent of Discord. Require no Discord account, bot, server, or integration.
 - Use Astro, PostgreSQL, and the Fantasy RTS UI Themes Arcane theme.
 - Build a companion addon to collect supported game data.
+- Use the BetterBags patterns in [the addon UI guide](addon-ui-patterns.md) when building the companion addon's interface.
 - Treat mobile access, accessibility, privacy, and security as standard requirements for every feature.
 - Agents are barred from creating subtitles. Do not add taglines, eyebrow text, or secondary title text.
 - The initial static front page is a foundation. It does not implement the features below yet.

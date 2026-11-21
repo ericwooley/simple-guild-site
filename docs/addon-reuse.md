@@ -118,6 +118,10 @@ Never use a display name alone as proof of ownership.
 
 ## Other candidates
 
+For the companion addon's interface, read [Addon UI patterns](addon-ui-patterns.md).
+The later BetterBags import adds UI references with separate pinned provenance in the source manifest.
+The source counts in this document's verification section describe the original reader import.
+
 Ultimate Bank is the selected source for this guild's bank-character stock.
 Read [Ultimate Bank integration](ultimate-bank-integration.md) before planning bank capture or website imports.
 That research does not change the copied-source inventory above.

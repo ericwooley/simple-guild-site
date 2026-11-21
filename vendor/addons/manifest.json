@@ -129,6 +129,53 @@
           "copyMode": "full-file"
         }
       ]
+    },
+    {
+      "id": "betterbags",
+      "name": "BetterBags",
+      "author": "Antonio Lobato (GitHub: Cidan, CurseForge: Cidanz)",
+      "repository": "https://github.com/Cidan/BetterBags",
+      "tag": "v0.9.5",
+      "revision": "a1116a1a583aaea382335be4a618217c2c9d0e65",
+      "projectUrl": "https://www.curseforge.com/wow/addons/better-bags",
+      "observedOn": "2026-11-20",
+      "observedProjectDownloads": 5093598,
+      "license": "MIT",
+      "interface": 16001,
+      "compatibilityEvidence": {
+        "upstreamPath": "BetterBags_Camelot.toc",
+        "upstreamBlob": "67a3fed9e7c9b252a8b6ce1ff08fd70c727cf0cc",
+        "sourceUrl": "https://github.com/Cidan/BetterBags/blob/a1116a1a583aaea382335be4a618217c2c9d0e65/BetterBags_Camelot.toc"
+      },
+      "files": [
+        {
+          "localPath": "vendor/addons/betterbags/LICENSE",
+          "upstreamPath": "LICENSE",
+          "upstreamBlob": "e35fab65f7a07b56a4ae83e692ed4c17fd48d495",
+          "upstreamSha256": "b92215e6fb3d24dbe22b524d917465340aa22a8e9e018f24986554a902026bec",
+          "sha256": "b92215e6fb3d24dbe22b524d917465340aa22a8e9e018f24986554a902026bec",
+          "sourceUrl": "https://github.com/Cidan/BetterBags/blob/a1116a1a583aaea382335be4a618217c2c9d0e65/LICENSE",
+          "copyMode": "full-file"
+        },
+        {
+          "localPath": "vendor/addons/betterbags/SimpleDark.lua",
+          "upstreamPath": "sonata/themes/simpledark.lua",
+          "upstreamBlob": "f3fac78801fd4680e686a4be4472428979d37f76",
+          "upstreamSha256": "fd8b86f4477836d40452423e014bf85079e3a675d91e37ccf05b4ca2b419ec8b",
+          "sha256": "fd8b86f4477836d40452423e014bf85079e3a675d91e37ccf05b4ca2b419ec8b",
+          "sourceUrl": "https://github.com/Cidan/BetterBags/blob/a1116a1a583aaea382335be4a618217c2c9d0e65/sonata/themes/simpledark.lua",
+          "copyMode": "full-file"
+        },
+        {
+          "localPath": "vendor/addons/betterbags/Search.lua",
+          "upstreamPath": "frames/search.lua",
+          "upstreamBlob": "088c96db2db257405432286138d91714cc734592",
+          "upstreamSha256": "ced43673d5fb7dbff43754b11fcbb4dfaeb5db0d48258858f3ab86bc2cd882bc",
+          "sha256": "ced43673d5fb7dbff43754b11fcbb4dfaeb5db0d48258858f3ab86bc2cd882bc",
+          "sourceUrl": "https://github.com/Cidan/BetterBags/blob/a1116a1a583aaea382335be4a618217c2c9d0e65/frames/search.lua",
+          "copyMode": "full-file"
+        }
+      ]
     }
   ]
 }
