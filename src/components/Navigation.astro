@@ -7,11 +7,11 @@ const links = [
   { href: '/roster', label: 'Roster', icon: 'users' },
   { href: '/bank', label: 'Guild bank', icon: 'chest' },
   { href: '/professions', label: 'Professions', icon: 'notice' },
-  { href: account ? '/account' : '/login', label: account ? 'My account' : 'Sign in', icon: 'users' },
+  { href: account ? '/account' : '/login', label: account?.testAccount ? 'Local test account' : account ? 'My account' : 'Sign in', icon: 'users' },
 ] as const;
 ---
 <header class="site-header"><div class="header-inner">
   <a class="brand" href="/" aria-label="Band of the Helping Hand home"><GuildCrest /><span>Band of the<br />Helping Hand</span></a>
   <nav class="desktop-nav" aria-label="Main navigation">{links.map(link => <a href={link.href} data-nav aria-current={Astro.url.pathname === link.href ? 'page' : undefined}><Icon name={link.icon} /><span>{link.label}</span></a>)}</nav>
   <details class="mobile-menu"><summary><Icon name="menu" /><span>Menu</span></summary><nav aria-label="Mobile navigation">{links.map(link => <a href={link.href} data-nav aria-current={Astro.url.pathname === link.href ? 'page' : undefined}><Icon name={link.icon} /><span>{link.label}</span></a>)}</nav></details>
-</div></header>
+</div>{account?.testAccount && <div class="mobile-test-status" role="status">Local test account</div>}</header>

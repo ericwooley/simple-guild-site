@@ -65,3 +65,23 @@ test('member request rows contain no owner status actions', async () => {
   const html = await renderRequestRows(['pending','approved','declined','fulfilled'], false);
   assert.doesNotMatch(html, /data-action="update-request"/);
 });
+
+test('local test identities remain visible across member routes', {skip: !base && 'Set TEST_BASE_URL to test a running website.'}, async (context) => {
+  const loginPage = await (await fetch(new URL('/login', base))).text();
+  if (!loginPage.includes('Test as guild member')) { context.skip('Local test login is disabled.'); return; }
+  const origin = new URL(base).origin;
+  const login = await fetch(new URL('/api/actions', base), {method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({action:'local-login',persona:'member'})});
+  assert.equal(login.status,200);
+  const cookie = login.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(cookie);
+  try {
+    for (const route of ['/', '/roster', '/bank', '/professions', '/account']) {
+      const response = await fetch(new URL(route,base), {headers:{Cookie:cookie}});
+      assert.equal(response.status,200);
+      const html = await response.text();
+      for (const nav of html.matchAll(/<nav\b[^>]*>(.*?)<\/nav>/gs)) assert.match(nav[1], /Local test account/, `Missing test identity in ${route} navigation`);
+    }
+  } finally {
+    await fetch(new URL('/api/actions',base), {method:'POST',headers:{Origin:origin,'Content-Type':'application/json',Cookie:cookie},body:JSON.stringify({action:'logout'})});
+  }
+});

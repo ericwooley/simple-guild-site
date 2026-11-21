@@ -14,7 +14,7 @@ const items = bank.filter(item => `${item.name} ${item.itemId}`.toLowerCase().in
 const eligible = characters.filter(character => character.verified && character.guildRank);
 const date = value => value ? new Date(value).toLocaleString('en-US',{timeZone:'UTC'}) + ' UTC' : 'Unknown';
 ---
-<Layout title="Guild bank" account={account}><div class="page-heading"><h1>Guild bank</h1>{account && <span class="badge">{bank.length} item variants</span>}</div>
+<Layout title="Guild bank" account={account}><div class="page-heading"><h1>Guild bank</h1>{account && <span class="badge">{bank.length} {bank.length === 1 ? 'item variant' : 'item variants'}</span>}</div>
 {!account ? <SignInGate /> : <>
 <form method="get" class="filter-bar"><label>Find an item<input type="search" name="q" value={q} /></label><label>Bank character<select name="source"><option value="">All bank characters</option>{sourceNames.map(name => <option selected={source === name}>{name}</option>)}</select></label><label class="check-label"><input type="checkbox" name="favorites" value="1" checked={favorites} /> Favorites only</label><button class="arcane-btn" type="submit">Filter</button><a class="text-link" href="/bank">Clear</a></form>
 <div class="bank-grid">{items.map(item => <article class="inventory-card"><div class="item-heading"><div class="item-icon" aria-hidden="true">{item.name.slice(0,1)}</div><h2>{item.name}</h2><strong class="stock-count">{item.count}</strong></div><div class="item-meta"><span>Item {item.itemId}</span>{(item.suffixId !== 0 || item.enchantId !== 0) && <span>Suffix {item.suffixId} · Enchant {item.enchantId}</span>}</div>
