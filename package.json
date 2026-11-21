@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "astro dev --host 0.0.0.0 --port 4321",
     "build": "astro build",
+    "test": "node --test tests/site.test.mjs",
     "preview": "astro preview --host 0.0.0.0 --port 4321",
     "db:dev": "docker compose up --abort-on-container-exit postgres",
     "db:shell": "docker compose exec postgres psql -U guild -d guild"

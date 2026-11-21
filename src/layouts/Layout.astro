@@ -1,0 +1,22 @@
+---
+import Navigation from '../components/Navigation.astro';
+import '../styles/vendor/arcane.css';
+import '../styles/site.css';
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Band of the Helping Hand guild hall for WoW Forever." />
+    <meta name="theme-color" content="#15130f" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>Band of the Helping Hand</title>
+  </head>
+  <body class="theme-arcane">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <Navigation />
+    <main id="main" tabindex="-1"><slot /></main>
+    <footer class="site-footer"><a href="#guild-hall">Band of the Helping Hand</a><span>WoW Forever</span><a href="#main">Back to top</a></footer>
+  </body>
+</html>

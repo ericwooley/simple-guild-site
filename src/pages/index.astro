@@ -1,5 +1,33 @@
-<!doctype html>
-<html lang="en">
-  <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width" /><title>Band of the Helping Hand</title></head>
-  <body><h1>Band of the Helping Hand</h1></body>
-</html>
+---
+import Layout from '../layouts/Layout.astro';
+import GuildCrest from '../components/GuildCrest.astro';
+import GuildPanel from '../components/GuildPanel.astro';
+import Icon from '../components/Icon.astro';
+---
+<Layout>
+  <section class="hero" id="guild-hall" tabindex="-1" aria-labelledby="guild-title">
+    <img class="hero-landscape" src="/guild-landscape.svg" alt="" width="1440" height="600" fetchpriority="high" />
+    <div class="hero-shade" aria-hidden="true"></div>
+    <div class="hero-content">
+      <h1 id="guild-title" class="arcane-title">Band of the<br />Helping Hand</h1>
+      <div class="hero-actions"><a href="#raids" class="arcane-btn">View raids</a><a href="#roster" class="arcane-btn arcane-btn-secondary">View roster</a></div>
+    </div>
+    <div class="hero-standard" aria-hidden="true"><div class="standard-ring"></div><GuildCrest large /></div>
+    <span class="hero-corner top-left" aria-hidden="true"></span><span class="hero-corner top-right" aria-hidden="true"></span><span class="hero-corner bottom-left" aria-hidden="true"></span><span class="hero-corner bottom-right" aria-hidden="true"></span>
+  </section>
+  <div class="section-divider" aria-hidden="true"><span></span><svg width="32" height="20" viewBox="0 0 32 20" fill="none"><path d="m16 3 7 7-7 7-7-7 7-7ZM2 10h7m14 0h7" stroke="currentColor" /></svg><span></span></div>
+  <div class="guild-grid">
+    <GuildPanel id="raids" title="Raids" icon="calendar">
+      <div class="empty-state"><div class="empty-icon"><Icon name="calendar" size={38} /></div><p>No raids scheduled.</p></div>
+    </GuildPanel>
+    <GuildPanel id="notices" title="Guild notices" icon="notice">
+      <div class="empty-state"><div class="empty-icon"><Icon name="notice" size={38} /></div><p>No notices posted.</p></div>
+    </GuildPanel>
+    <GuildPanel id="roster" title="Roster" icon="users">
+      <div class="empty-state compact-empty"><div class="empty-icon"><Icon name="users" size={32} /></div><p>No members added.</p></div>
+    </GuildPanel>
+    <GuildPanel id="guild-bank" title="Guild bank" icon="chest">
+      <div class="empty-state compact-empty"><div class="empty-icon"><Icon name="chest" size={32} /></div><p>No bank entries.</p></div>
+    </GuildPanel>
+  </div>
+</Layout>

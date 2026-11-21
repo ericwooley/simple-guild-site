@@ -1,0 +1,13 @@
+---
+import Icon from './Icon.astro';
+interface Props {
+  id: string;
+  title: string;
+  icon: 'calendar' | 'users' | 'chest' | 'notice';
+}
+const { id, title, icon } = Astro.props;
+---
+<section id={id} tabindex="-1" aria-labelledby={`${id}-title`} class="guild-panel arcane-card-highlight">
+  <div class="panel-heading"><Icon name={icon} /><h2 id={`${id}-title`}>{title}</h2><span class="heading-rule" aria-hidden="true"></span></div>
+  <slot />
+</section>

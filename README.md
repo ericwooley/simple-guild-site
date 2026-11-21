@@ -1,7 +1,5 @@
 # Band of the Helping Hand
 
-A WoW Forever guild site built with Astro and Fantasy RTS UI Themes.
-
 ## Requirements
 
 - Node.js 22.23.4 or newer
@@ -27,7 +25,7 @@ A WoW Forever guild site built with Astro and Fantasy RTS UI Themes.
 9. Register the site service:
 
    ```sh
-   proc-man process register --label helping-hand-web --kind service --cwd "$PWD" --tag project:helping-hand --tag component:astro --tag purpose:development --port http=http://127.0.0.1:4321/ -- pnpm dev
+   proc-man process register --label helping-hand-web --kind service --cwd "$PWD" --tag project:helping-hand --tag component:astro --tag purpose:development --port http=http://127.0.0.1:4321/ -- "$(command -v node)" node_modules/astro/bin/astro.mjs dev --host 0.0.0.0 --port 4321
    ```
 
 10. Start the site with `proc-man process start PROCESS_ID`.
@@ -35,6 +33,7 @@ A WoW Forever guild site built with Astro and Fantasy RTS UI Themes.
 
 Use the IDs that proc-man returns. Stop services with `proc-man process stop PROCESS_ID`.
 The database volume retains local data after the service stops.
+The site service uses the absolute Node.js path because the daemon has a separate command search path.
 
 ## Scope
 
@@ -44,6 +43,7 @@ The static front page does not connect to PostgreSQL or change guild data.
 Authentication, membership, raid scheduling, and bank transactions require future work.
 
 Execute `pnpm build` to create the static site in `dist/`.
+Execute `pnpm test` after the build to check the generated page and asset links.
 Execute `pnpm db:shell` to inspect the local database.
 
 ## Licenses

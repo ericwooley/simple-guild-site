@@ -1,0 +1,118 @@
+:root {
+  color-scheme: dark;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  --arcane-text-muted: #ad9e84;
+  --arcane-gold-muted: #bba674;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 116px; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+body.theme-arcane { background: radial-gradient(ellipse at 50% 0%, #30291d 0%, #191610 47%, #100f0c 100%); }
+body.theme-arcane::before { position: fixed; }
+a { color: inherit; text-decoration: none; }
+button, summary, a { -webkit-tap-highlight-color: transparent; }
+a, summary { touch-action: manipulation; }
+:focus-visible { outline: 2px solid #f2d58b; outline-offset: 5px; }
+h1, h2, p { margin: 0; }
+h1, h2 { text-wrap: balance; }
+p { text-wrap: pretty; }
+.skip-link { position: fixed; z-index: 100; top: 12px; left: 16px; padding: 12px 20px; background: #e8c66a; color: #17120c; transform: translateY(-180%); }
+.skip-link:focus { transform: translateY(0); }
+.site-header { position: sticky; top: 0; z-index: 20; border-top: 3px solid #857040; border-bottom: 1px solid #4c402b; background: #15130ff5; box-shadow: 0 6px 30px #0005; }
+.header-inner { width: min(1280px, calc(100% - 80px)); margin: auto; display: flex; align-items: center; justify-content: space-between; gap: 32px; min-height: 96px; }
+.brand { display: inline-flex; align-items: center; gap: 14px; flex-shrink: 0; }
+.brand span { font-size: 17px; line-height: 1.35; letter-spacing: .035em; color: #e1c88e; }
+.guild-crest { width: 45px; height: 55px; flex: none; }
+.desktop-nav { display: flex; align-items: stretch; align-self: stretch; gap: 8px; }
+[data-nav] { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 48px; padding: 0 16px; font: 500 14px/1.4 system-ui, sans-serif; color: #baae96; border-bottom: 2px solid transparent; transition: color 140ms, background-color 140ms; }
+[data-nav] svg { width: 18px; height: 18px; }
+[data-nav]:hover { color: #f1d99c; background: #d4af5509; }
+[data-nav][aria-current] { color: #ead095; border-bottom-color: #d4af55; background: linear-gradient(0deg, #d4af5515, transparent); }
+.mobile-menu { display: none; }
+main { width: min(1280px, calc(100% - 80px)); margin: 40px auto 60px; }
+.hero { position: relative; display: flex; align-items: center; min-height: 420px; overflow: hidden; border: 1px solid #72603e; background: #20271f; box-shadow: 0 12px 40px #0005, inset 0 0 0 5px #090c0a; }
+.hero-landscape { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 64% center; }
+.hero-shade { position: absolute; inset: 0; background: linear-gradient(90deg, #10130ff0 0%, #121710bd 34%, #151b1140 69%, #10160f10 100%), linear-gradient(0deg, #0e130f99, transparent 55%); }
+.hero-content { position: relative; z-index: 2; padding: 56px 60px; }
+.hero .arcane-title { color: #eedcaa; font-family: Georgia, serif; font-size: clamp(2.5rem, 4.5vw, 4rem); font-weight: 400; line-height: 1.1; letter-spacing: -.025em; text-shadow: 0 3px 20px #0009; }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 36px; }
+.hero-actions .arcane-btn { min-height: 48px; padding: 12px 23px; font: 600 14px/1.4 system-ui, sans-serif; border-width: 1px; transition: filter 140ms, transform 140ms; }
+.hero-actions .arcane-btn:hover { filter: brightness(1.12); }
+.hero-actions .arcane-btn:active { transform: scale(.96); }
+.hero-actions .arcane-btn-secondary { color: #e4d8ba; background: #1c201ac9; border-color: #94805a; }
+.hero-standard { position: absolute; right: 13%; top: 50%; transform: translateY(-50%); width: 220px; height: 260px; display: grid; place-items: center; }
+.guild-crest-large { position: relative; width: 174px; height: 210px; filter: drop-shadow(0 10px 20px #0009); }
+.standard-ring { position: absolute; width: 238px; height: 238px; border: 1px solid #d8be7638; border-radius: 50%; box-shadow: 0 0 0 10px #d8be7607, 0 0 0 11px #d8be7620, 0 0 80px #d8be761a; }
+.hero-corner { position: absolute; width: 22px; height: 22px; border-color: #c0a46b; border-style: solid; pointer-events: none; }
+.top-left { top: 7px; left: 7px; border-width: 2px 0 0 2px; }
+.top-right { top: 7px; right: 7px; border-width: 2px 2px 0 0; }
+.bottom-left { bottom: 7px; left: 7px; border-width: 0 0 2px 2px; }
+.bottom-right { bottom: 7px; right: 7px; border-width: 0 2px 2px 0; }
+.section-divider { display: flex; align-items: center; justify-content: center; gap: 20px; margin: 30px 0; color: #9d8350; }
+.section-divider span { width: 160px; height: 1px; background: linear-gradient(90deg, transparent, #665333); }
+.section-divider span:last-child { transform: rotate(180deg); }
+.guild-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 24px; }
+.guild-panel { padding: 26px 30px; min-width: 0; scroll-margin-top: 16px; }
+.guild-panel.arcane-card-highlight { border: 1px solid #53452e; background: linear-gradient(135deg, #2b261cdd, #191712ef); box-shadow: inset 0 0 0 4px #17140f70, 0 5px 20px #0002; }
+.panel-heading { display: flex; align-items: center; gap: 12px; color: #d6ba79; }
+.panel-heading h2 { font-size: 21px; font-weight: 400; line-height: 1.4; white-space: nowrap; }
+.heading-rule { height: 1px; flex: 1; margin-left: 8px; background: linear-gradient(90deg, #685433, transparent); }
+.empty-state { display: grid; place-items: center; align-content: center; gap: 19px; min-height: 204px; text-align: center; }
+.empty-icon { display: grid; place-items: center; width: 72px; height: 72px; color: #bba674; background: radial-gradient(circle, #a48a4520, transparent 70%); }
+.empty-state p { color: #bdb19a; font: 400 15px/1.6 system-ui, sans-serif; }
+.compact-empty { min-height: 120px; display: flex; justify-content: flex-start; gap: 18px; text-align: left; }
+.compact-empty .empty-icon { width: 48px; height: 48px; flex-shrink: 0; }
+.site-footer { width: min(1280px, calc(100% - 80px)); margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 26px 0 30px; border-top: 1px solid #403724; color: #ac9d80; font: 400 13px/1.5 system-ui, sans-serif; }
+.site-footer a { display: flex; align-items: center; min-height: 44px; }
+.site-footer a:hover { color: #ead095; }
+@media (min-width: 1600px) { main { margin-top: 52px; } .hero { min-height: 460px; } }
+@media (max-width: 1100px) {
+  .header-inner, main, .site-footer { width: calc(100% - 48px); }
+  .header-inner { gap: 20px; }
+  .desktop-nav { gap: 0; }
+  [data-nav] { padding: 0 11px; }
+  .desktop-nav svg { display: none; }
+  .hero-content { padding: 48px 40px; }
+  .hero-standard { right: 8%; }
+}
+@media (max-width: 760px) {
+  html { scroll-padding-top: 98px; }
+  .header-inner { min-height: 78px; }
+  .brand span { font-size: 15px; }
+  .brand .guild-crest { width: 36px; height: 44px; }
+  .desktop-nav { display: none; }
+  .mobile-menu { display: block; }
+  .mobile-menu summary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 10px; cursor: pointer; color: #e1c88e; list-style: none; font: 14px system-ui, sans-serif; }
+  .mobile-menu summary::-webkit-details-marker { display: none; }
+  .mobile-menu[open] summary { background: #d4af5514; }
+  .mobile-menu nav { position: absolute; z-index: 30; top: calc(100% - 1px); left: 0; right: 0; display: grid; background: #191610; border-bottom: 1px solid #77603b; box-shadow: 0 12px 20px #0008; padding: 10px 24px; }
+  .mobile-menu [data-nav] { justify-content: flex-start; padding: 14px 12px; }
+  main { margin: 24px auto 36px; }
+  .hero { min-height: 500px; align-items: flex-end; }
+  .hero-content { padding: 38px 30px; width: 100%; }
+  .hero .arcane-title { font-size: clamp(2.5rem, 8vw, 3.5rem); }
+  .hero-standard { top: 110px; right: calc(50% - 90px); width: 180px; height: 150px; }
+  .guild-crest-large { width: 104px; height: 128px; }
+  .standard-ring { width: 145px; height: 145px; }
+  .hero-landscape { object-position: 70% center; }
+  .hero-shade { background: linear-gradient(0deg, #10130ff5, #10130fa6 45%, #10130f10 100%); }
+  .hero-actions { margin-top: 26px; }
+  .guild-grid { grid-template-columns: 1fr; gap: 18px; }
+  .guild-panel { padding: 24px; }
+  .empty-state { min-height: 150px; }
+  .compact-empty { min-height: 100px; }
+  .site-footer { flex-wrap: wrap; gap: 8px 24px; }
+  .site-footer > a:first-child { width: 100%; }
+  .site-footer > a:last-child { margin-left: auto; }
+}
+@media (max-width: 380px) {
+  .header-inner, main, .site-footer { width: calc(100% - 32px); }
+  .hero-content { padding: 30px 22px; }
+  .hero-actions { gap: 10px; }
+  .hero-actions .arcane-btn { padding: 12px 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
+}
