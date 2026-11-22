@@ -866,6 +866,25 @@
         triggerEl.removeAttribute('aria-disabled');
       }
     };
+    document.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const link = target.closest<HTMLAnchorElement>('a[target="_blank"][href]');
+      if (!link) return;
+      const rawHref = link.getAttribute('href') || '';
+      if (!rawHref || rawHref.startsWith('#')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      try {
+        const resolved = new URL(rawHref, window.location.href);
+        if (resolved.origin === window.location.origin) {
+          window.location.assign(resolved.pathname + resolved.search + resolved.hash);
+        } else if (/^https?:$/i.test(resolved.protocol)) {
+          const openExternal = (window as any).runtime?.BrowserOpenURL;
+          if (typeof openExternal === 'function') openExternal(resolved.toString());
+        }
+      } catch {}
+    });
     document.querySelectorAll<HTMLAnchorElement>('a[href="/auth/battlenet"], a[href="/auth/start"]').forEach((link) => {
       link.addEventListener('click', (event) => {
         event.preventDefault();
