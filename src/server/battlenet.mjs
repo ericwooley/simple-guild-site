@@ -421,11 +421,15 @@ export async function syncBattleNetGuildMembership(db, accountId, region, charac
     // report multiple distinct Blizzard guild IDs for this slug+region; if ambiguous, refuse to auto-bind.
     let ambiguousUnbound = false;
     if (storedBnetGuildId === null) {
-      const distinctIds = (await db.query(
-        `SELECT DISTINCT guild_id FROM account_characters WHERE guild_slug=$1 AND region=$2 AND verified=true AND guild_id IS NOT NULL`,
-        [guildSlug, region]
-      )).rows.map(r => Number(r.guild_id)).filter(n => Number.isSafeInteger(n) && n > 0);
-      if (distinctIds.length > 1) ambiguousUnbound = true;
+      const distinctIds = new Set(
+        (await db.query(
+          `SELECT DISTINCT guild_id FROM account_characters WHERE guild_slug=$1 AND region=$2 AND verified=true AND guild_id IS NOT NULL`,
+          [guildSlug, region]
+        )).rows.map(r => Number(r.guild_id)).filter(n => Number.isSafeInteger(n) && n > 0)
+      );
+      if (rosterGuildId) distinctIds.add(Number(rosterGuildId));
+      for (const c of allMatching) if (c.guildId) distinctIds.add(Number(c.guildId));
+      if (distinctIds.size > 1) ambiguousUnbound = true;
     }
     // Bind strictly to ONE Blizzard guild ID (stored, else roster's, else primary character's) so characters from
     // two same-slug guilds with different Blizzard IDs are never mixed into the same portal guild.
