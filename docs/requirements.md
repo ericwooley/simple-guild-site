@@ -143,6 +143,12 @@ Expiry, revocation, and guild permissions form this project's application requir
 - Define the guild's request approval rules and officer permissions.
 - Define how guild profession titles apply when a member changes mains or leaves the guild.
 
+## Email notifications
+
+- Send all guild emails via standard SMTP (Mailpit locally on `127.0.0.1:1025`, Resend SMTP in production).
+- Every email must be sent as `multipart/alternative` containing an HTML version styled to match the site's Fantasy RTS Arcane theme (dark parchment, gold borders/accents, no subtitles) along with a plain-text backup.
+- Notification emails are optional; members must verify their email address before receiving notifications, or can opt out ("No emails") and add/verify an address later on My account.
+
 ## Scope exclusions
 
 - Discord features are excluded.

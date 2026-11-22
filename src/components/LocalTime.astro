@@ -1,0 +1,10 @@
+---
+const { value = null, fallback = '' } = Astro.props;
+const iso = value ? (value instanceof Date ? value.toISOString() : String(value)) : '';
+const valid = iso && !Number.isNaN(Date.parse(iso));
+---
+{valid ? (
+  <time datetime={iso} data-local-time>{new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}</time>
+) : (
+  fallback
+)}

@@ -1,0 +1,285 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import SignInGate from '../../components/SignInGate.astro';
+import GuildPanel from '../../components/GuildPanel.astro';
+import ActionForm from '../../components/ActionForm.astro';
+import LocalTime from '../../components/LocalTime.astro';
+import ActivityItem from '../../components/ActivityItem.astro';
+import Pagination from '../../components/Pagination.astro';
+import { getPortalData } from '../../server/service.mjs';
+import { reputationStanding } from '../../server/reputation.mjs';
+import { professionCap } from '../../server/professionSlots.mjs';
+import { levelQualityClass, professionQualityClass, rankQualityClass } from '../../server/rarity.mjs';
+
+const characterId = Astro.params.id ? decodeURIComponent(Astro.params.id) : '';
+const { account, guild, characters, roster, professions, commendations, activityFeed, bankContributions, isGuildMaster, permissions } = await getPortalData(Astro.request);
+
+const rosterMember = roster.find(m => m.id === characterId) ?? null;
+const memberProfessions = professions.filter(p => p.characterId === characterId);
+const ownChar = characters.find(c => c.id === characterId) ?? null;
+
+const profile = rosterMember ?? (ownChar ? {
+  ...ownChar,
+  online: false,
+  zone: null,
+  reputationCount: 0,
+  reputation: reputationStanding(0),
+  professions: memberProfessions.map(p => ({ id: p.id, name: p.name, rank: p.rank, maxRank: p.maxRank, recipeCount: p.recipes.length }))
+} : null);
+
+const normName = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
+const isOwnCharacter = Boolean(profile && characters.some(c => c.id === profile.id || normName(c.name) === normName(profile.name)));
+const profileCommendations = profile
+  ? commendations.filter(entry => {
+      const recipients = entry.recipients?.length ? entry.recipients : [{ characterId: entry.characterId, characterName: entry.characterName }];
+      return recipients.some(r => r.characterId === profile.id || normName(r.characterName) === normName(profile.name));
+    })
+  : [];
+const profileReputation = profile?.reputation ?? reputationStanding(profileCommendations.length);
+const profileActivity = profile
+  ? activityFeed.filter(entry => {
+      if (entry.kind === 'commendation') {
+        const recipients = entry.recipients?.length ? entry.recipients : [{ characterId: entry.characterId, characterName: entry.characterName }];
+        return entry.authorCharacterId === profile.id
+          || normName(entry.authorName) === normName(profile.name)
+          || recipients.some(r => r.characterId === profile.id || normName(r.characterName) === normName(profile.name));
+      }
+      return entry.actorCharacterId === profile.id || normName(entry.actorName) === normName(profile.name);
+    })
+  : [];
+const activityPageSize = 20;
+const activityTotalPages = Math.max(1, Math.ceil(profileActivity.length / activityPageSize));
+const rawActPage = Number(Astro.url.searchParams.get('page') || '1');
+const activityPage = Number.isSafeInteger(rawActPage) && rawActPage >= 1 ? Math.min(rawActPage, activityTotalPages) : 1;
+const pageActivity = profileActivity.slice((activityPage - 1) * activityPageSize, activityPage * activityPageSize);
+const activityPageUrl = (p: number) =>
+  `${p > 1 ? `/character/${encodeURIComponent(characterId)}?page=${p}` : `/character/${encodeURIComponent(characterId)}`}#character-activity`;
+const profileManualContributions = profile
+  ? bankContributions.filter(c => c.characterId === profile.id || normName(c.characterName) === normName(profile.name))
+  : [];
+const contribPageSize = 10;
+const contribTotalPages = Math.max(1, Math.ceil(profileManualContributions.length / contribPageSize));
+const rawCPage = Number(Astro.url.searchParams.get('cpage') || '1');
+const contribPage = Number.isSafeInteger(rawCPage) && rawCPage >= 1 ? Math.min(rawCPage, contribTotalPages) : 1;
+const pageManualContributions = profileManualContributions.slice((contribPage - 1) * contribPageSize, contribPage * contribPageSize);
+const contribPageUrl = (p: number) => {
+  const params = new URLSearchParams();
+  if (activityPage > 1) params.set('page', String(activityPage));
+  if (p > 1) params.set('cpage', String(p));
+  const qs = params.toString();
+  return `${qs ? `/character/${encodeURIComponent(characterId)}?${qs}` : `/character/${encodeURIComponent(characterId)}`}#character-contribution`;
+};
+const canManageContributions = isGuildMaster || permissions.approveBankRequests || permissions.manageGuildSync;
+
+const titleForProfession: Record<string, string> = {
+  Alchemy: 'Guild Alchemist',
+  Blacksmithing: 'Guild Blacksmith',
+  Enchanting: 'Guild Enchanter',
+  Engineering: 'Guild Engineer',
+  Herbalism: 'Guild Herbalist',
+  Leatherworking: 'Guild Leatherworker',
+  Mining: 'Guild Miner',
+  Skinning: 'Guild Skinner',
+  Tailoring: 'Guild Tailor',
+  Cooking: 'Guild Chef',
+  'First Aid': 'Guild Medic',
+  Fishing: 'Guild Angler',
+};
+
+const suggestedTitles = profile
+  ? [...new Set(profile.professions.map(p => titleForProfession[p.name] ?? `Guild ${p.name}`))]
+  : [];
+---
+<Layout title={profile ? profile.name : 'Character profile'} account={account} guild={guild} characters={characters} isGuildMaster={isGuildMaster}>
+  <div class="page-heading">
+    <h1>{profile ? profile.name : 'Character profile'}</h1>
+    <a class="text-link" href="/roster">Back to roster</a>
+  </div>
+  {!account ? <SignInGate /> : !profile ? (
+    <GuildPanel id="character-missing" title="Character not found" icon="users">
+      <p class="notice">This character is not on the current guild roster.</p>
+      <a class="text-link" href="/roster">Browse guild roster</a>
+    </GuildPanel>
+  ) : <>
+    <GuildPanel id="character-summary" title="Character details" icon="users">
+      <dl>
+        <div><dt>Character</dt><dd><span class={profile.level ? levelQualityClass(profile.level) : ''}>{[profile.level ? `Level ${profile.level}` : null, profile.className].filter(Boolean).join(' ') || 'Unknown'}</span></dd></div>
+        <div><dt>Realm</dt><dd>{profile.realm}</dd></div>
+        <div><dt>Guild rank</dt><dd><span class={profile.guildRank ? rankQualityClass(profile.guildRankIndex) : ''}>{profile.guildRank || 'Unknown'}</span></dd></div>
+        {profile.primaryCharacter && (
+          <div><dt>Primary character</dt><dd><a class="profile-link" href={`/character/${encodeURIComponent(profile.primaryCharacter.id)}`}>{profile.primaryCharacter.name}</a></dd></div>
+        )}
+        <div><dt>Guild reputation</dt><dd><span class={`rep-tag ${profile.reputationQualityClass || 'quality-poor'}`}>{profileReputation.label}</span>{profileReputation.count ? ` (${profile.helpingPoints ?? 0} helping · ${profile.donationPoints ?? 0} donation)` : ''}</dd></div>
+        <div><dt>Bank contribution</dt><dd><span class={(profile.donatedCopper ?? 0) > 0 ? (profile.donatedQualityClass || 'donation-value') : ''}>{profile.donatedFormatted ?? '0c'}</span>{profile.donationCount ? ` (${profile.donationCount} ${profile.donationCount === 1 ? 'contribution' : 'contributions'})` : ''}</dd></div>
+        {canManageContributions && (
+          <>
+            <div><dt>Bank withdrawn</dt><dd><span class={(profile.withdrawnCopper ?? 0) > 0 ? 'withdraw-value' : ''}>{profile.withdrawnFormatted ?? '0c'}</span>{profile.withdrawnCount ? ` (${profile.withdrawnCount})` : ''}</dd></div>
+            <div><dt>Net contribution</dt><dd><span class={(profile.netContributionCopper ?? 0) < 0 ? 'withdraw-value' : (profile.netContributionCopper ?? 0) > 0 ? 'donation-value' : ''}>{profile.netContributionFormatted ?? '0c'}</span></dd></div>
+          </>
+        )}
+        <div><dt>Account link</dt><dd>{profile.verified ? 'Verified' : 'Not verified'}</dd></div>
+        <div><dt>Last sync</dt><dd><LocalTime value={profile.updatedAt} fallback="Unknown" /></dd></div>
+      </dl>
+      <div class="badges">
+        {profile.isGuildPrimary && <span class="badge">Primary</span>}
+        {profile.titles.map(title => <span class="badge">{title}</span>)}
+      </div>
+    </GuildPanel>
+
+    {profile.isGuildPrimary && (profile.alts?.length ?? 0) > 0 && (
+      <GuildPanel id="character-alts" title="Alts" icon="users">
+        <div class="roster-list" data-sortable-table>
+          <div class="roster-table-header roster-table-3col">
+            <button type="button" class="sort-header" data-sort-col="0" data-sort-type="text">Character</button>
+            <button type="button" class="sort-header" data-sort-col="1" data-sort-type="num">Level</button>
+            <button type="button" class="sort-header" data-sort-col="2" data-sort-type="text">Rank</button>
+          </div>
+          {profile.alts.map(alt => (
+            <div class="roster-row roster-summary roster-summary-table roster-table-3col" data-s-name={alt.name} data-s0={alt.name} data-s1={alt.level ?? ''} data-s2={alt.guildRank || ''}>
+              <div class="roster-identity">
+                <a class="profile-link" href={`/character/${encodeURIComponent(alt.id)}`}><strong class="roster-name">{alt.name}</strong></a>
+                {alt.className && <span class="roster-meta">{alt.className}</span>}
+              </div>
+              <span class={`roster-cell roster-cell-level ${alt.level ? levelQualityClass(alt.level) : 'roster-cell-muted'}`}>{alt.level ?? '—'}</span>
+              <span class={`roster-cell ${alt.guildRank ? rankQualityClass(alt.guildRankIndex) : 'roster-cell-muted'}`}>{alt.guildRank || 'Unknown'}</span>
+            </div>
+          ))}
+        </div>
+      </GuildPanel>
+    )}
+
+    {permissions.assignTitles && (
+      <GuildPanel id="character-titles" title="Guild profession designations" icon="notice">
+        {suggestedTitles.length > 0 && (
+          <div class="row-actions" style="justify-content: flex-start; margin-bottom: 18px;">
+            {suggestedTitles.map(title => {
+              const hasTitle = profile.titles.includes(title);
+              return (
+                <ActionForm
+                  action="set-title"
+                  label={hasTitle ? `Remove ${title}` : `Designate as ${title}`}
+                  values={{ characterId: profile.id, title, assigned: !hasTitle }}
+                />
+              );
+            })}
+          </div>
+        )}
+        {profile.titles.filter(t => !suggestedTitles.includes(t)).length > 0 && (
+          <div class="badges">
+            {profile.titles.filter(t => !suggestedTitles.includes(t)).map(title => (
+              <ActionForm action="set-title" label={`Remove ${title}`} values={{ characterId: profile.id, title, assigned: false }} />
+            ))}
+          </div>
+        )}
+        <ActionForm action="set-title" label="Assign custom title" values={{ characterId: profile.id, assigned: true }}>
+          <label>Custom title<input name="title" maxlength="80" required placeholder="Guild Enchanter" /></label>
+        </ActionForm>
+      </GuildPanel>
+    )}
+
+    {canManageContributions && (
+      <GuildPanel id="character-contribution" title="Give bank contribution" icon="chest">
+        <ActionForm action="add-bank-contribution" label="Save bank contribution" values={{ characterId: profile.id }} class="stacked-form">
+          <div class="currency-inputs">
+            <label>Gold<input name="gold" type="number" min="0" max="200000" step="1" value="0" /></label>
+            <label>Silver<input name="silver" type="number" min="0" max="99" step="1" value="0" /></label>
+            <label>Copper<input name="copper" type="number" min="0" max="99" step="1" value="0" /></label>
+            <label>Action
+              <select name="direction">
+                <option value="add" selected>Add (+)</option>
+                <option value="subtract">Subtract (-)</option>
+              </select>
+            </label>
+          </div>
+          <label>Reason<input name="reason" maxlength="300" required placeholder="Traded herbs to bank alt, donated bags in person…" /></label>
+        </ActionForm>
+        {profileManualContributions.length > 0 && (
+          <>
+            <div class="activity-feed" style="margin-top: 16px;">
+              {pageManualContributions.map(c => (
+                <article class="activity-item">
+                  <div class="activity-header">
+                    <div class="activity-actors">
+                      <span class="badge badge-donation">Contribution</span>
+                      <strong class="donation-value">{c.formatted}</strong>
+                      <span class="activity-verb">— {c.reason}</span>
+                    </div>
+                    <div class="activity-meta">
+                      <span class="data-age"><LocalTime value={c.createdAt} fallback="Unknown" /> · by {c.awardedByName}</span>
+                      {c.canDelete && <ActionForm action="delete-bank-contribution" label="Remove" values={{ id: c.id }} class="inline-action" />}
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+            <Pagination page={contribPage} totalPages={contribTotalPages} totalItems={profileManualContributions.length} pageSize={contribPageSize} pageUrl={contribPageUrl} label="Manual contributions pagination" />
+          </>
+        )}
+      </GuildPanel>
+    )}
+
+    <GuildPanel id="character-professions" title="Professions and recipes" icon="notice">
+      {memberProfessions.length > 0 ? (
+        <div class="roster-list" data-sortable-table>
+          <div class="roster-table-header roster-table-3col">
+            <button type="button" class="sort-header" data-sort-col="0" data-sort-type="text">Profession</button>
+            <button type="button" class="sort-header" data-sort-col="1" data-sort-type="num">Skill</button>
+            <button type="button" class="sort-header" data-sort-col="2" data-sort-type="num">Recipes</button>
+          </div>
+          {memberProfessions.map(profession => (
+            <details
+              class="roster-row"
+              data-s-name={profession.name}
+              data-s0={profession.name}
+              data-s1={profession.rank ?? ''}
+              data-s2={profession.recipes.length}
+            >
+              <summary class="roster-summary roster-summary-table roster-table-3col">
+                <div class="roster-identity">
+                  <strong class={`roster-name ${professionQualityClass(profession.rank, professionCap(profession.name, profession.maxRank, profession.rank))}`}>{profession.name}</strong>
+                </div>
+                <span class={`roster-cell ${professionQualityClass(profession.rank, professionCap(profession.name, profession.maxRank, profession.rank))}`}>{profession.rank} / {professionCap(profession.name, profession.maxRank, profession.rank)}</span>
+                <span class="roster-cell">{profession.recipes.length} {profession.recipes.length === 1 ? 'recipe' : 'recipes'}</span>
+              </summary>
+              <div class="roster-details roster-details-single">
+                <div class="roster-prof-item">
+                  <progress class={professionQualityClass(profession.rank, professionCap(profession.name, profession.maxRank, profession.rank))} value={profession.rank} max={professionCap(profession.name, profession.maxRank, profession.rank)} aria-label={`${profile.name} ${profession.name} skill`}></progress>
+                  <p class="data-age">Last sync: <LocalTime value={profession.updatedAt} fallback="Unknown" /></p>
+                </div>
+                {profession.recipes.length > 0 ? (
+                  <div class="recipe-chip-list">
+                    {profession.recipes.map(recipe => <span class="prof-chip">{recipe.name}</span>)}
+                  </div>
+                ) : <p class="notice">No recipes synced yet.</p>}
+              </div>
+            </details>
+          ))}
+        </div>
+      ) : <p class="notice">No professions synced for this character yet.</p>}
+    </GuildPanel>
+
+    <GuildPanel id="character-activity" title="Activity" icon="users">
+      {!isOwnCharacter && (
+        <ActionForm action="add-commendation" label={`Thank ${profile.name}`} values={{ characterId: profile.id }} class="activity-form">
+          <label>How did {profile.name} help you?
+            <textarea name="message" rows="3" maxlength="500" required placeholder={`Share how ${profile.name} helped you…`}></textarea>
+          </label>
+        </ActionForm>
+      )}
+      <div class="activity-feed">
+        {pageActivity.map(entry => <ActivityItem entry={entry} showDelete />)}
+        {!profileActivity.length && (
+          <p class="notice">{isOwnCharacter ? 'No guild activity on your profile yet.' : `No activity for ${profile.name} yet.`}</p>
+        )}
+      </div>
+      <Pagination
+        page={activityPage}
+        totalPages={activityTotalPages}
+        totalItems={profileActivity.length}
+        pageSize={activityPageSize}
+        pageUrl={activityPageUrl}
+        label="Profile activity pagination"
+      />
+    </GuildPanel>
+  </>}
+</Layout>

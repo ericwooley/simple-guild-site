@@ -1,17 +1,62 @@
 ---
 import GuildCrest from './GuildCrest.astro';
 import Icon from './Icon.astro';
-const { account } = Astro.props;
+import LocalTime from './LocalTime.astro';
+const { account, guild = null, characters = [], isGuildMaster = false } = Astro.props;
+const notifications = Array.isArray(account?.notifications) ? account.notifications : [];
+const unreadNotifCount = Number(account?.unreadNotificationCount ?? 0);
+const guildName = guild?.name || 'Band of the Helping Hand';
+const verifiedCharacters = characters.filter((character: { verified?: boolean }) => character.verified);
+const selectedCharacter = verifiedCharacters.find((character: { isMain?: boolean }) => character.isMain) ?? null;
+const optionLabel = (character: { name: string; level?: number | null; className?: string | null }) =>
+  character.level ? `${character.name} (${character.level}${character.className ? ` ${character.className}` : ''})` : character.className ? `${character.name} (${character.className})` : character.name;
+const bankRequestCount = Number(guild?.pendingBankRequestCount ?? 0);
 const links = [
-  { href: '/', label: 'Guild hall', icon: 'home' },
-  { href: '/roster', label: 'Roster', icon: 'users' },
-  { href: '/bank', label: 'Guild bank', icon: 'chest' },
-  { href: '/professions', label: 'Professions', icon: 'notice' },
-  { href: account ? '/account' : '/login', label: account?.testAccount ? 'Local test account' : account ? 'My account' : 'Sign in', icon: 'users' },
+  { href: '/', label: 'Guild hall', icon: 'home', count: 0 },
+  { href: '/activity', label: 'Activity', icon: 'notice', count: 0 },
+  { href: '/roster', label: 'Roster', icon: 'users', count: 0 },
+  { href: '/bank', label: 'Guild bank', icon: 'chest', count: bankRequestCount },
+  { href: '/professions', label: 'Professions', icon: 'notice', count: 0 },
+  ...(isGuildMaster ? [{ href: '/guild-master', label: 'Guild Master', icon: 'notice' as const, count: 0 }] : []),
+  { href: account ? '/account' : '/login', label: account?.testAccount ? 'Local test account' : account ? 'My account' : 'Sign in', icon: 'users', count: 0 },
 ] as const;
 ---
 <header class="site-header"><div class="header-inner">
-  <a class="brand" href="/" aria-label="Band of the Helping Hand home"><GuildCrest /><span>Band of the<br />Helping Hand</span></a>
-  <nav class="desktop-nav" aria-label="Main navigation">{links.map(link => <a href={link.href} data-nav aria-current={Astro.url.pathname === link.href ? 'page' : undefined}><Icon name={link.icon} /><span>{link.label}</span></a>)}</nav>
-  <details class="mobile-menu"><summary><Icon name="menu" /><span>Menu</span></summary><nav aria-label="Mobile navigation">{links.map(link => <a href={link.href} data-nav aria-current={Astro.url.pathname === link.href ? 'page' : undefined}><Icon name={link.icon} /><span>{link.label}</span></a>)}</nav></details>
+  <a class="brand" href="/" aria-label={`${guildName} home`}><GuildCrest logoUrl={guild?.logoUrl} logoName={guild?.logoName} /><span>{guildName}</span></a>
+  <nav class="desktop-nav" aria-label="Main navigation">{links.map(link => <a href={link.href} data-nav aria-current={Astro.url.pathname === link.href ? 'page' : undefined}><Icon name={link.icon} /><span>{link.label}</span>{link.count > 0 && <span class="nav-count" aria-label={`${link.count} open bank requests`}>{link.count}</span>}</a>)}</nav>
+  {account && (
+    <details class="notif-menu" data-notif-menu>
+      <summary class="notif-bell" aria-label={`Notifications${unreadNotifCount > 0 ? ` (${unreadNotifCount} unread)` : ''}`}>
+        <Icon name="bell" size={19} />
+        {unreadNotifCount > 0 && <span class="nav-count" data-notif-badge>{unreadNotifCount > 99 ? '99+' : unreadNotifCount}</span>}
+      </summary>
+      <div class="notif-dropdown">
+        <div class="notif-dropdown-header">
+          <strong>Notifications</strong>
+          {unreadNotifCount > 0 && <button type="button" class="text-link" data-notif-mark-all>Mark all read</button>}
+        </div>
+        <div class="notif-list">
+          {notifications.length > 0 ? notifications.map((n: { id: string; title: string; body: string; link: string | null; readAt: string | null; createdAt: string }) => {
+            const inner = (
+              <>
+                <div class="notif-item-title">
+                  {!n.readAt && <span class="notif-dot" aria-hidden="true"></span>}
+                  <strong>{n.title}</strong>
+                </div>
+                {n.body && <p class="notif-item-body">{n.body}</p>}
+                <span class="data-age"><LocalTime value={n.createdAt} /></span>
+              </>
+            );
+            return n.link ? (
+              <a class={`notif-item${!n.readAt ? ' notif-unread' : ''}`} href={n.link} data-notif-item={n.id}>{inner}</a>
+            ) : (
+              <div class={`notif-item${!n.readAt ? ' notif-unread' : ''}`} data-notif-item={n.id}>{inner}</div>
+            );
+          }) : <p class="notif-empty">No notifications yet.</p>}
+        </div>
+      </div>
+    </details>
+  )}
+  {account && verifiedCharacters.length > 0 && <form data-action="set-main" data-auto-submit="true" class="nav-character-selector"><select name="characterId" aria-label="Selected character">{!selectedCharacter && <option value="" disabled selected>Select character</option>}{verifiedCharacters.map((character: { id: string; name: string; level?: number | null; className?: string | null; isMain?: boolean }) => <option value={character.id} selected={character.isMain}>{optionLabel(character)}</option>)}</select><p class="form-message sr-only" role="status" aria-live="polite"></p></form>}
+  <details class="mobile-menu"><summary><Icon name="menu" /><span>Menu</span></summary><nav aria-label="Mobile navigation">{account && verifiedCharacters.length > 0 && <form data-action="set-main" data-auto-submit="true" class="mobile-character-selector"><label>Selected character<select name="characterId">{!selectedCharacter && <option value="" disabled selected>Select character</option>}{verifiedCharacters.map((character: { id: string; name: string; level?: number | null; className?: string | null; isMain?: boolean }) => <option value={character.id} selected={character.isMain}>{optionLabel(character)}</option>)}</select></label><p class="form-message" role="status" aria-live="polite"></p></form>}{links.map(link => <a href={link.href} data-nav aria-current={Astro.url.pathname === link.href ? 'page' : undefined}><Icon name={link.icon} /><span>{link.label}</span>{link.count > 0 && <span class="nav-count" aria-label={`${link.count} open bank requests`}>{link.count}</span>}</a>)}</nav></details>
 </div>{account?.testAccount && <div class="mobile-test-status" role="status">Local test account</div>}</header>

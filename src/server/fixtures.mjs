@@ -1,3 +1,5 @@
+import { saveGuildState } from './guildStore.mjs';
+
 export function validateFixtureConfig(config) {
   if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('Use a fixture configuration object.');
   if (Object.keys(config).some(k => !['realm','guildName','region','ownerCharacter','memberCharacter','ownerAlts','memberAlts','bankCharacters'].includes(k))) throw new Error('Unsupported fixture configuration field.');
@@ -27,9 +29,10 @@ export function fixtureState(config = {}, now = new Date().toISOString()) {
 }
 export async function seedFixtures(db, config = {}) {
   const state = fixtureState(config);
-  await db.query(`INSERT INTO guilds(id,name,realm,region,state) VALUES('fixture-guild',$1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET name=excluded.name,realm=excluded.realm,region=excluded.region,state=excluded.state`, [config.guildName ?? 'Band of the Helping Hand',config.realm ?? 'Test Realm',config.region ?? 'us',state]);
+  await db.query(`INSERT INTO guilds(id,name,realm,region) VALUES('fixture-guild',$1,$2,$3) ON CONFLICT(id) DO UPDATE SET name=excluded.name,realm=excluded.realm,region=excluded.region`, [config.guildName ?? 'Band of the Helping Hand',config.realm ?? 'Test Realm',config.region ?? 'us']);
   for (const role of ['owner','member']) {
     await db.query(`INSERT INTO accounts(id,battle_tag,test_account) VALUES($1,$2,true) ON CONFLICT(id) DO UPDATE SET battle_tag=excluded.battle_tag,test_account=true`, [`fixture-${role}`,`Test ${role === 'owner' ? 'Owner' : 'Member'} (fixture)`]);
     await db.query(`INSERT INTO memberships(account_id,guild_id,role,active) VALUES($1,'fixture-guild',$2,true) ON CONFLICT(account_id,guild_id) DO UPDATE SET role=excluded.role,active=true`, [`fixture-${role}`,role]);
   }
+  await saveGuildState(db, 'fixture-guild', state);
 }

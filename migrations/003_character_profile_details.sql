@@ -1,0 +1,11 @@
+ALTER TABLE account_characters ADD COLUMN IF NOT EXISTS slug text;
+ALTER TABLE account_characters ADD COLUMN IF NOT EXISTS ruleset text;
+ALTER TABLE account_characters ADD COLUMN IF NOT EXISTS guild_name text;
+ALTER TABLE account_characters ADD COLUMN IF NOT EXISTS guild_slug text;
+ALTER TABLE account_characters ADD COLUMN IF NOT EXISTS guild_id bigint;
+ALTER TABLE account_characters ADD COLUMN IF NOT EXISTS guild_rank_index integer;
+ALTER TABLE account_characters ADD COLUMN IF NOT EXISTS guild_rank text;
+ALTER TABLE account_characters ADD COLUMN IF NOT EXISTS equipped_item_level integer;
+ALTER TABLE account_characters ADD COLUMN IF NOT EXISTS average_item_level integer;
+ALTER TABLE account_characters ADD COLUMN IF NOT EXISTS last_login_at timestamptz;
+ALTER TABLE account_characters ADD COLUMN IF NOT EXISTS professions jsonb NOT NULL DEFAULT '[]'::jsonb;

@@ -31,7 +31,7 @@ export async function getIdentity(request, db = getPool()) {
   secureTransport(request);
   const cookie = cookies(request).hh_session;
   if (!cookie || !/^[A-Za-z0-9_-]{43}$/.test(cookie)) return null;
-  const result = await db.query(`SELECT a.id,a.battle_tag AS "battleTag",a.test_account AS "testAccount",m.guild_id AS "guildId",m.role FROM sessions s JOIN accounts a ON a.id=s.account_id LEFT JOIN memberships m ON m.account_id=a.id AND m.active=true WHERE s.id_hash=$1 AND s.expires_at>now() ORDER BY m.guild_id LIMIT 1`, [hash(cookie)]);
+  const result = await db.query(`SELECT a.id,a.battle_tag AS "battleTag",a.test_account AS "testAccount",a.characters_synced_at AS "charactersSyncedAt",a.characters_sync_error AS "charactersSyncError",a.email,a.email_verified AS "emailVerified",a.email_opted_out AS "emailOptedOut",a.email_prompted_at AS "emailPromptedAt",m.guild_id AS "guildId",m.role FROM sessions s JOIN accounts a ON a.id=s.account_id LEFT JOIN memberships m ON m.account_id=a.id AND m.active=true WHERE s.id_hash=$1 AND s.expires_at>now() ORDER BY m.guild_id LIMIT 1`, [hash(cookie)]);
   const identity = result.rows[0] ?? null;
   if (identity?.testAccount && !localMode(request)) return null;
   return identity;

@@ -1,12 +1,30 @@
 ---
-interface Props { large?: boolean; }
-const { large = false } = Astro.props;
+interface Props { large?: boolean; logoUrl?: string | null; logoName?: string | null; }
+const { large = false, logoUrl = null, logoName = null } = Astro.props;
+const size = large ? 210 : 54;
 ---
-<svg class:list={['guild-crest', { 'guild-crest-large': large }]} viewBox="0 0 160 190" fill="none" aria-hidden="true">
-  <path d="M20 24 80 7l60 17v76c0 38-31 64-60 81-29-17-60-43-60-81V24Z" fill="#151c1a" stroke="#b99850" stroke-width="3" />
-  <path d="m29 31 51-15 51 15v69c0 32-25 55-51 71-26-16-51-39-51-71V31Z" stroke="#75613a" />
-  <path d="M80 23v139M36 94h88" stroke="#ad9458" stroke-opacity=".12" />
-  <path d="M66 116 50 94c-7-10 0-16 6-10l9 10V60c0-8 10-8 10 0v24-35c0-9 11-9 11 0v35-29c0-8 11-8 11 0v29-19c0-8 10-8 10 0v39c0 13-10 25-20 27H76c-4-5-7-10-10-15Z" fill="#c9ad6d" stroke="#e1c88b" stroke-width="1.5" stroke-linejoin="round" />
-  <path d="M74 139h20v9H74z" fill="#c9ad6d" />
-  <path d="m80 1 5 6-5 6-5-6 5-6Z" fill="#dbc38c" />
-</svg>
+{logoUrl ? (
+  <img
+    src={logoUrl}
+    alt=""
+    title={logoName || undefined}
+    width={size}
+    height={size}
+    class:list={['guild-crest', { 'guild-crest-large': large }]}
+    decoding="async"
+    aria-hidden="true"
+  />
+) : (
+  <picture class="guild-crest-picture" aria-hidden="true">
+    <source srcset="/guild-crest.webp" type="image/webp" />
+    <img
+      src="/guild-crest.png"
+      alt=""
+      title={logoName || undefined}
+      width={size}
+      height={size}
+      class:list={['guild-crest', { 'guild-crest-large': large }]}
+      decoding="async"
+    />
+  </picture>
+)}

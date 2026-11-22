@@ -1,0 +1,105 @@
+---
+import ActionForm from './ActionForm.astro';
+import LocalTime from './LocalTime.astro';
+const { entry, showDelete = false } = Astro.props;
+const verbByType: Record<string, string> = {
+  withdraw: 'withdrew',
+  'money-withdraw': 'withdrew',
+  requested: 'requested',
+  handed: 'received',
+  cancelled: 'cancelled request for',
+  reopened: 'reopened request for',
+  deposit: 'deposited',
+  'money-deposit': 'deposited',
+  'request-pending': 'requested',
+  'request-approved': 'had approved',
+  'request-fulfilled': 'received',
+  'request-declined': 'had declined'
+};
+const badgeByType: Record<string, string> = {
+  withdraw: 'Withdraw',
+  'money-withdraw': 'Withdraw',
+  requested: 'Request',
+  handed: 'Received',
+  cancelled: 'Cancelled',
+  reopened: 'Reopened',
+  'request-pending': 'Request',
+  'request-approved': 'Approved',
+  'request-fulfilled': 'Fulfilled',
+  'request-declined': 'Declined'
+};
+---
+{entry.kind === 'donation' ? (
+  <article class="activity-item">
+    <div class="activity-header">
+      <div class="activity-actors">
+        <span class="badge badge-donation">Donation</span>
+        {entry.actorCharacterId
+          ? <a class="profile-link" href={`/character/${encodeURIComponent(entry.actorCharacterId)}`}><strong>{entry.actorName}</strong></a>
+          : <strong>{entry.actorName}</strong>}
+        <span class="activity-verb">donated</span>
+        {entry.txType === 'money-deposit'
+          ? <strong class="donation-value">{entry.moneyFormatted}</strong>
+          : <><strong>{entry.itemName || `Item #${entry.itemId}`}</strong>{entry.quantity > 1 && <span class="activity-verb">×{entry.quantity}</span>}</>}
+        {entry.bankName && <span class="activity-verb">to {entry.bankName}</span>}
+        {entry.txType !== 'money-deposit' && entry.totalVendorCopper > 0 && (
+          <span class="donation-value">({entry.vendorFormatted})</span>
+        )}
+      </div>
+      <div class="activity-meta">
+        <span class="data-age"><LocalTime value={entry.createdAt} /></span>
+      </div>
+    </div>
+  </article>
+) : entry.kind === 'bank' ? (
+  <article class="activity-item">
+    <div class="activity-header">
+      <div class="activity-actors">
+        <span class="badge">{badgeByType[entry.txType] || entry.txType}</span>
+        {entry.actorCharacterId
+          ? <a class="profile-link" href={`/character/${encodeURIComponent(entry.actorCharacterId)}`}><strong>{entry.actorName}</strong></a>
+          : <strong>{entry.actorName}</strong>}
+        <span class="activity-verb">{verbByType[entry.txType] || entry.txType}</span>
+        {entry.txType === 'money-withdraw' || entry.txType === 'money-deposit'
+          ? <strong class="donation-value">{entry.moneyFormatted}</strong>
+          : <><strong>{entry.itemName || `Item #${entry.itemId}`}</strong>{entry.quantity > 1 && <span class="activity-verb">×{entry.quantity}</span>}</>}
+        {entry.bankName && <span class="activity-verb">{entry.txType === 'requested' || entry.txType.startsWith('request-') ? `from ${entry.bankName}` : `from ${entry.bankName}`}</span>}
+        {entry.txType !== 'money-withdraw' && entry.totalVendorCopper > 0 && (
+          <span class="donation-value">({entry.vendorFormatted})</span>
+        )}
+      </div>
+      <div class="activity-meta">
+        <span class="data-age"><LocalTime value={entry.createdAt} /></span>
+      </div>
+    </div>
+    {entry.note && <p class="activity-message">{entry.note}</p>}
+  </article>
+) : (() => {
+  const recipients = entry.recipients?.length ? entry.recipients : [{ characterId: entry.characterId, characterName: entry.characterName }];
+  return (
+    <article class="activity-item">
+      <div class="activity-header">
+        <div class="activity-actors">
+          <span class="badge">Helping hand</span>
+          {entry.authorCharacterId
+            ? <a class="profile-link" href={`/character/${encodeURIComponent(entry.authorCharacterId)}`}><strong>{entry.authorName}</strong></a>
+            : <strong>{entry.authorName}</strong>}
+          <span class="activity-verb">thanked</span>
+          {recipients.map((r: { characterId: string; characterName: string }, idx: number) => (
+            <>
+              {idx > 0 && <span class="activity-verb">{idx === recipients.length - 1 ? (recipients.length > 2 ? ', and' : ' and') : ','}</span>}
+              <a class="profile-link" href={`/character/${encodeURIComponent(r.characterId)}`}><strong>{r.characterName}</strong></a>
+            </>
+          ))}
+        </div>
+        <div class="activity-meta">
+          <span class="data-age"><LocalTime value={entry.createdAt} /></span>
+          {showDelete && entry.canDelete && (
+            <ActionForm action="delete-commendation" label="Remove" values={{ id: entry.id }} class="inline-action" />
+          )}
+        </div>
+      </div>
+      <p class="activity-message">{entry.message}</p>
+    </article>
+  );
+})()}

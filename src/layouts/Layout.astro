@@ -1,18 +1,76 @@
 ---
 import Navigation from '../components/Navigation.astro';
 import PortalBehavior from '../components/PortalBehavior.astro';
+import ActionForm from '../components/ActionForm.astro';
 import '../styles/vendor/arcane.css';
 import '../styles/site.css';
-const { title = 'Guild hall', account = null } = Astro.props;
+const { title = 'Guild hall', account = null, guild = null, characters = [], isGuildMaster = false } = Astro.props;
+const guildName = guild?.name || 'Band of the Helping Hand';
+const logoUrl = guild?.logoUrl || null;
 Astro.response.headers.set('Cache-Control', 'private, no-store');
 Astro.response.headers.set('Referrer-Policy', 'same-origin');
 ---
 <!doctype html><html lang="en"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="description" content="Band of the Helping Hand guild hall for WoW Forever." />
-<meta name="theme-color" content="#15130f" /><link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-<title>{title} · Band of the Helping Hand</title>
+<meta name="description" content={`${guildName} guild hall for WoW Forever.`} />
+<meta name="theme-color" content="#15130f" />
+{logoUrl ? <link rel="icon" type="image/webp" href={logoUrl} /> : <><link rel="icon" href="/favicon.ico" sizes="any" />
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" /></>}
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+<link rel="manifest" href="/site.webmanifest" />
+<meta property="og:title" content={`${title} · ${guildName}`} />
+<meta property="og:description" content={`${guildName} guild hall for WoW Forever.`} />
+<meta property="og:image" content={logoUrl || '/guild-crest.png'} />
+<title>{title} · {guildName}</title>
 </head><body class="theme-arcane"><a class="skip-link" href="#main">Skip to content</a>
-<Navigation account={account} /><main id="main" tabindex="-1"><slot /></main>
-<footer class="site-footer"><a href="/">Band of the Helping Hand</a><span>WoW Forever</span><a href="#main">Back to top</a></footer>
+<Navigation account={account} guild={guild} characters={characters} isGuildMaster={isGuildMaster} /><main id="main" tabindex="-1"><slot /></main>
+<footer class="site-footer"><a href="/">{guildName}</a><span>WoW Forever</span><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="#main">Back to top</a></footer>
+<dialog id="desktop-settings-dialog" class="desktop-settings-dialog" aria-labelledby="desktop-settings-title">
+  <form id="desktop-settings-form" class="stacked-form">
+    <div class="card-heading">
+      <h2 id="desktop-settings-title">Desktop Settings</h2>
+      <button id="desktop-settings-close" type="button" class="arcane-btn arcane-btn-secondary">Close</button>
+    </div>
+    <label class="check-label"><input id="setting-autosync" type="checkbox" checked /> Auto-sync on startup</label>
+    <label>Check interval (seconds)<input id="setting-interval" type="number" min="2" max="300" step="1" value="5" required /></label>
+    <label>HelpingHand.lua path<input id="setting-filepath" type="text" placeholder="/Applications/World of Warcraft/_forever_/WTF/Account/.../HelpingHand.lua" /></label>
+    <div class="row-actions">
+      <button id="setting-pick-file" type="button" class="arcane-btn arcane-btn-secondary">Choose file…</button>
+      <button type="submit" class="arcane-btn">Save settings</button>
+    </div>
+    <p id="desktop-settings-status" class="form-message" role="status" aria-live="polite"></p>
+  </form>
+</dialog>
+{account?.needsPrimaryChoice && account?.guildCharacters?.length > 0 && (
+  <dialog id="primary-character-dialog" class="desktop-settings-dialog" data-auto-open="true" aria-labelledby="primary-character-title">
+    <h2 id="primary-character-title">Choose your primary character</h2>
+    <p class="notice">Select which character in {guildName} is your primary. Your other characters in this guild will be listed as alts on your primary's profile.</p>
+    <ActionForm action="set-guild-primary" label="Save primary character" class="stacked-form">
+      <div class="primary-choice-list">
+        {account.guildCharacters.map((char, idx) => (
+          <label class="primary-choice-item">
+            <input type="radio" name="characterId" value={char.id} checked={idx === 0} required />
+            <span class="primary-choice-name">
+              <strong>{char.name}</strong>
+              <span class="roster-meta">{[char.level ? `Lv ${char.level}` : null, char.className, char.guildRank].filter(Boolean).join(' · ')}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </ActionForm>
+  </dialog>
+)}
+{account?.needsEmailPrompt && (
+  <dialog id="email-notifications-dialog" class="desktop-settings-dialog" data-auto-open="true" aria-labelledby="email-notifications-title">
+    <h2 id="email-notifications-title">Email notifications</h2>
+    <p class="notice">Would you like to add an email address for guild notifications? You will need to verify it, or you can choose no emails and add one later on My account.</p>
+    <ActionForm action="set-notification-email" label="Send verification link" class="stacked-form">
+      <label>Email address<input name="email" type="email" maxlength="254" required placeholder="you@example.com" autocomplete="email" /></label>
+    </ActionForm>
+    <div style="margin-top: 12px;">
+      <ActionForm action="opt-out-email" label="No emails" class="inline-action" buttonClass="btn-subtle" />
+    </div>
+  </dialog>
+)}
 <PortalBehavior /></body></html>

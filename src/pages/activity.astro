@@ -1,0 +1,165 @@
+---
+import Layout from '../layouts/Layout.astro';
+import SignInGate from '../components/SignInGate.astro';
+import GuildPanel from '../components/GuildPanel.astro';
+import ActionForm from '../components/ActionForm.astro';
+import CommendationForm from '../components/CommendationForm.astro';
+import ActivityItem from '../components/ActivityItem.astro';
+import Pagination from '../components/Pagination.astro';
+import { getPortalData } from '../server/service.mjs';
+
+const { account, guild, characters, roster, activityFeed, isGuildMaster } = await getPortalData(Astro.request);
+const q = Astro.url.searchParams.get('q')?.trim() || '';
+const query = q.toLowerCase();
+const filterKind = Astro.url.searchParams.get('type') || 'all';
+const playerFilter = Astro.url.searchParams.get('player')?.trim() || '';
+const playerLower = playerFilter.toLowerCase();
+const range = Astro.url.searchParams.get('range') || '';
+const fromDate = Astro.url.searchParams.get('from')?.trim() || '';
+const toDate = Astro.url.searchParams.get('to')?.trim() || '';
+
+const ownIds = new Set(characters.map(c => c.id));
+const ownNames = new Set(characters.map(c => c.name.trim().toLowerCase()));
+const eligibleMembers = roster
+  .filter(m => !ownIds.has(m.id) && !ownNames.has(m.name.trim().toLowerCase()))
+  .sort((a, b) => a.name.localeCompare(b.name))
+  .map(m => ({ id: m.id, name: m.name, rank: m.guildRank || '', level: m.level ?? null }));
+
+const activityPlayers = [...new Set([
+  ...roster.map(m => m.name),
+  ...activityFeed.flatMap(e => e.kind === 'donation'
+    ? [e.actorName]
+    : [e.authorName, ...(e.recipients ?? []).map(r => r.characterName)])
+].filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
+
+const nowMs = Date.now();
+let minTimeMs = 0;
+let maxTimeMs = Number.POSITIVE_INFINITY;
+if (fromDate && /^\d{4}-\d{2}-\d{2}$/.test(fromDate)) {
+  minTimeMs = Date.parse(`${fromDate}T00:00:00`);
+} else if (range === 'today') {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  minTimeMs = start.getTime();
+} else if (range === '7d') {
+  minTimeMs = nowMs - 7 * 86400000;
+} else if (range === '30d') {
+  minTimeMs = nowMs - 30 * 86400000;
+} else if (range === 'month') {
+  const start = new Date();
+  start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+  minTimeMs = start.getTime();
+}
+if (toDate && /^\d{4}-\d{2}-\d{2}$/.test(toDate)) {
+  maxTimeMs = Date.parse(`${toDate}T23:59:59.999`);
+}
+
+const entries = activityFeed.filter(entry => {
+  if (filterKind === 'commendation' && entry.kind !== 'commendation') return false;
+  if (filterKind === 'donation' && entry.kind !== 'donation') return false;
+  if (filterKind === 'bank' && entry.kind !== 'bank') return false;
+  const ts = Date.parse(entry.createdAt || '');
+  if (!Number.isNaN(ts)) {
+    if (ts < minTimeMs || ts > maxTimeMs) return false;
+  }
+  if (playerLower) {
+    const actors = entry.kind === 'commendation'
+      ? [entry.authorName || '', ...(entry.recipients ?? []).map(r => r.characterName || '')]
+      : [entry.actorName || ''];
+    if (!actors.some(a => a.toLowerCase().includes(playerLower))) return false;
+  }
+  if (!query) return true;
+  if (entry.kind !== 'commendation') {
+    return `${entry.actorName || ''} ${entry.itemName || ''} ${entry.bankName || ''} ${entry.txType || ''} ${entry.note || ''} ${entry.kind}`.toLowerCase().includes(query);
+  }
+  const recipientNames = (entry.recipients ?? []).map(r => r.characterName).join(' ');
+  return `${recipientNames} ${entry.authorName} ${entry.message}`.toLowerCase().includes(query);
+});
+
+const pageSize = 30;
+const totalPages = Math.max(1, Math.ceil(entries.length / pageSize));
+const rawPage = Number(Astro.url.searchParams.get('page') || '1');
+const page = Number.isSafeInteger(rawPage) && rawPage >= 1 ? Math.min(rawPage, totalPages) : 1;
+const pageEntries = entries.slice((page - 1) * pageSize, page * pageSize);
+
+const buildUrl = (overrides: Record<string, string | number | null> = {}) => {
+  const params = new URLSearchParams();
+  const next: Record<string, string> = {
+    q,
+    type: filterKind === 'all' ? '' : filterKind,
+    player: playerFilter,
+    range,
+    from: fromDate,
+    to: toDate,
+    page: page > 1 ? String(page) : ''
+  };
+  for (const [k, v] of Object.entries(overrides)) {
+    next[k] = v === null || v === undefined ? '' : String(v);
+  }
+  if (next.type === 'all') next.type = '';
+  if (next.page === '1') next.page = '';
+  for (const [k, v] of Object.entries(next)) {
+    if (v) params.set(k, v);
+  }
+  const qs = params.toString();
+  return qs ? `/activity?${qs}` : '/activity';
+};
+---
+<Layout title="Activity feed" account={account} guild={guild} characters={characters} isGuildMaster={isGuildMaster}>
+  <div class="page-heading">
+    <h1>Activity feed</h1>
+    {account && <span class="badge">{entries.length} {entries.length === 1 ? 'entry' : 'entries'}</span>}
+  </div>
+  {!account ? <SignInGate /> : <>
+    {eligibleMembers.length > 0 && (
+      <GuildPanel id="thank-member" title="Recognize a helping hand" icon="users">
+        <CommendationForm members={eligibleMembers} />
+      </GuildPanel>
+    )}
+
+    <form class="filter-bar" method="get">
+      {filterKind !== 'all' && <input type="hidden" name="type" value={filterKind} />}
+      <label>Search<input name="q" type="search" value={q} placeholder="Note, item, or keyword…" /></label>
+      <label>Character<input name="player" type="search" value={playerFilter} list="activity-players" placeholder="Any character…" /></label>
+      <datalist id="activity-players">{activityPlayers.map(name => <option value={name} />)}</datalist>
+      <label>Timeline
+        <select name="range">
+          <option value="" selected={!range}>All time</option>
+          <option value="today" selected={range === 'today'}>Today</option>
+          <option value="7d" selected={range === '7d'}>Last 7 days</option>
+          <option value="30d" selected={range === '30d'}>Last 30 days</option>
+          <option value="month" selected={range === 'month'}>This month</option>
+        </select>
+      </label>
+      <label>From date<input name="from" type="date" value={fromDate} /></label>
+      <label>To date<input name="to" type="date" value={toDate} /></label>
+      <a class="text-link" href="/activity">Clear</a>
+    </form>
+
+    <div class="explorer-bar">
+      <div class="profession-pills" aria-label="Filter activity type">
+        <a class={`pill${filterKind === 'all' ? ' pill-active' : ''}`} href={buildUrl({ type: 'all', page: 1 })}>All ({activityFeed.length})</a>
+        <a class={`pill${filterKind === 'commendation' ? ' pill-active' : ''}`} href={buildUrl({ type: 'commendation', page: 1 })}>Helping hand ({activityFeed.filter(e => e.kind === 'commendation').length})</a>
+        <a class={`pill${filterKind === 'donation' ? ' pill-active' : ''}`} href={buildUrl({ type: 'donation', page: 1 })}>Donations ({activityFeed.filter(e => e.kind === 'donation').length})</a>
+        <a class={`pill${filterKind === 'bank' ? ' pill-active' : ''}`} href={buildUrl({ type: 'bank', page: 1 })}>Bank requests & withdrawals ({activityFeed.filter(e => e.kind === 'bank').length})</a>
+      </div>
+    </div>
+
+    <div class="activity-feed">
+      {pageEntries.map(entry => <ActivityItem entry={entry} showDelete />)}
+      {!entries.length && (
+        <p class="notice">{activityFeed.length ? 'No activity entries match your filters.' : 'No activity yet. Thank a guildmate above or sync bank history.'}</p>
+      )}
+    </div>
+
+    <Pagination
+      page={page}
+      totalPages={totalPages}
+      totalItems={entries.length}
+      pageSize={pageSize}
+      pageUrl={(p: number) => buildUrl({ page: p })}
+      label="Activity feed pagination"
+    />
+  </>}
+</Layout>

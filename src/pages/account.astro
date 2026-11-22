@@ -3,19 +3,75 @@ import Layout from '../layouts/Layout.astro';
 import SignInGate from '../components/SignInGate.astro';
 import GuildPanel from '../components/GuildPanel.astro';
 import ActionForm from '../components/ActionForm.astro';
+import LocalTime from '../components/LocalTime.astro';
+import Pagination from '../components/Pagination.astro';
 import { getPortalData } from '../server/service.mjs';
-const {account, guild, characters, tokens, syncs} = await getPortalData(Astro.request);
-const date = value => value ? new Date(value).toLocaleString('en-US',{timeZone:'UTC'}) + ' UTC' : 'Never';
+import { professionSlots, professionCap } from '../server/professionSlots.mjs';
+import { professionQualityClass, rankQualityClass } from '../server/rarity.mjs';
+const {account, guild, characters, syncs, isGuildMaster} = await getPortalData(Astro.request);
+
+const syncPageSize = 15;
+const syncTotalPages = Math.max(1, Math.ceil(syncs.length / syncPageSize));
+const rawSPage = Number(Astro.url.searchParams.get('spage') || '1');
+const syncPage = Number.isSafeInteger(rawSPage) && rawSPage >= 1 ? Math.min(rawSPage, syncTotalPages) : 1;
+const pageSyncs = syncs.slice((syncPage - 1) * syncPageSize, syncPage * syncPageSize);
+const emailStatusParam = Astro.url.searchParams.get('email') || '';
+
+const accountUrl = (overrides: Record<string, number>, hash = '') => {
+  const params = new URLSearchParams();
+  const next = { spage: syncPage, ...overrides };
+  if (next.spage > 1) params.set('spage', String(next.spage));
+  const qs = params.toString();
+  return `${qs ? `/account?${qs}` : '/account'}${hash}`;
+};
 ---
-<Layout title="My account" account={account}><div class="page-heading"><h1>My account</h1>{account && <ActionForm action="logout" label="Sign out" />}</div>
+<Layout title="My account" account={account} guild={guild} characters={characters} isGuildMaster={isGuildMaster}><div class="page-heading"><h1>My account</h1>{account && <ActionForm action="logout" label="Sign out" />}</div>
 {!account ? <SignInGate /> : <>
-<div class="account-strip"><strong>{account.battleTag}</strong><span>{guild?.name || 'Guild membership needs verification'}</span>{account.testAccount && <span class="badge">Local test account</span>}<span class="badge">{account.role === 'owner' ? 'Guild owner' : account.role === 'member' ? 'Guild member' : 'Not verified'}</span></div>
-<GuildPanel id="characters" title="Your characters" icon="users"><div class="character-grid">{characters.map(character => <article class="character-card"><h3>{character.name}</h3><dl><div><dt>Character</dt><dd>Level {character.level} {character.className}</dd></div><div><dt>Realm</dt><dd>{character.realm}</dd></div><div><dt>Guild rank</dt><dd>{character.guildRank || 'Unknown'}</dd></div><div><dt>Ownership</dt><dd>{character.verified ? 'Verified' : 'Needs verification'}</dd></div></dl><div class="badges">{character.titles.map(title => <span class="badge">{title}</span>)}</div>{character.isMain ? <span class="badge">Main character</span> : character.verified && <ActionForm action="set-main" label="Make main character" values={{characterId:character.id}} />}</article>)}</div>{!characters.length && <p class="notice">Character verification must complete before you can sync records or request bank items.</p>}</GuildPanel>
-<GuildPanel id="addon-sync" title="Addon Sync" icon="notice">
-{account.role ? <><div class="sync-instructions"><ol><li>Generate a sync token.</li><li>Paste the token into the Helping Hand addon settings.</li><li>Capture your data in the addon.</li><li>Reload the game interface, then run the local bridge.</li></ol><div class="row-actions"><a class="arcane-btn arcane-btn-secondary" href="/downloads/HelpingHand.zip" download>Download addon</a><a class="arcane-btn arcane-btn-secondary" href="/downloads/sync-addon.py" download>Download bridge</a></div></div><ActionForm action="issue-token" label="Generate sync token"><label>Sync permission<select name="scope"><option value="member">My verified characters and professions</option>{account.role === 'owner' && <option value="guild">Guild roster, bank, and available professions</option>}</select></label></ActionForm>
-<section id="token-reveal" class="token-reveal" hidden aria-labelledby="new-token-heading"><h3 id="new-token-heading">Your new sync token</h3><p>Copy this token now. Keep it private. This page shows it once.</p><label>Sync token<textarea id="new-token" readonly rows="4" autocomplete="off" spellcheck="false"></textarea></label><button id="copy-token" class="arcane-btn" type="button">Copy token</button><p id="copy-status" role="status"></p><a class="text-link" href="/account">Done</a></section>
-<div class="record-list">{tokens.map(token => <article class="record-row"><div><h3>{token.scope === 'guild' ? 'Guild sync' : 'Member sync'}</h3><dl><div><dt>Status</dt><dd>{token.revokedAt ? 'Revoked' : new Date(token.expiresAt).getTime() <= Date.now() ? 'Expired' : 'Active'}</dd></div><div><dt>Expires</dt><dd>{date(token.expiresAt)}</dd></div><div><dt>Last use</dt><dd>{date(token.lastUsedAt)}</dd></div></dl></div>{!token.revokedAt && <ActionForm action="revoke-token" label="Revoke token" values={{id:token.id}} />}</article>)}</div></> : <p class="notice">Verify your character ownership and guild membership before generating a sync token.</p>}
+<div class="account-strip"><strong>{account.battleTag}</strong><span>{guild?.name || 'Guild membership needs verification'}</span>{account.testAccount && <span class="badge">Local test account</span>}<span class="badge">{account.role === 'owner' ? 'Guild owner' : account.role === 'member' ? 'Guild member' : 'Not verified'}</span><span id="desktop-app-badge" class="badge" hidden>Desktop app</span></div>
+<GuildPanel id="characters" title="Your characters" icon="users">{!account.testAccount && <div class="character-toolbar"><div class="row-actions"><a class="arcane-btn arcane-btn-secondary" href="/auth/battlenet">Refresh characters from Battle.net</a>{account.charactersSyncedAt && <span class="badge">Checked <LocalTime value={account.charactersSyncedAt} fallback="Never" /></span>}</div></div>}{account.charactersSyncError && <p class="notice">{account.charactersSyncError}</p>}<div class="roster-list" data-sortable-table>{characters.length > 0 && <div class="roster-table-header"><button type="button" class="sort-header" data-sort-col="0" data-sort-type="text">Character</button><button type="button" class="sort-header" data-sort-col="1" data-sort-type="num">Cooking</button><button type="button" class="sort-header" data-sort-col="2" data-sort-type="num">First Aid</button><button type="button" class="sort-header" data-sort-col="3" data-sort-type="num">Fishing</button><button type="button" class="sort-header" data-sort-col="4" data-sort-type="text">Primary 1</button><button type="button" class="sort-header" data-sort-col="5" data-sort-type="text">Primary 2</button></div>}{characters.map(character => { const slots = professionSlots(character.professions); return (<details class={`roster-row${character.isMain ? ' roster-row-selected' : ''}`} data-s-name={character.name} data-s0={character.name} data-s1={slots[0]?.learned && slots[0].rank !== null ? slots[0].rank : ''} data-s2={slots[1]?.learned && slots[1].rank !== null ? slots[1].rank : ''} data-s3={slots[2]?.learned && slots[2].rank !== null ? slots[2].rank : ''} data-s4={slots[3]?.learned ? slots[3].cell : ''} data-s5={slots[4]?.learned ? slots[4].cell : ''}><summary class="roster-summary roster-summary-table"><div class="roster-identity"><strong class="roster-name">{character.name}</strong><span class="roster-meta">{[character.level ? `Lv ${character.level}` : null, character.raceName, character.className].filter(Boolean).join(' ') || 'Unknown'}</span>{character.guildRank && <span class={`badge ${rankQualityClass(character.guildRankIndex)}`}>{character.guildRank}</span>}{account.primaryCharacterId === character.id && <span class="badge">Primary</span>}{character.isMain && <span class="badge">Selected</span>}{character.titles.map(title => <span class="badge">{title}</span>)}</div>{slots.map(slot => <span class={`roster-cell${!slot.learned ? ' roster-cell-muted' : ''}`}>{slot.cell}</span>)}</summary><div class="roster-details">{guild && account.primaryCharacterId !== character.id && (account.guildCharacters ?? []).some(gc => gc.id === character.id) && <div class="roster-details-actions" style="margin-bottom: 12px;"><ActionForm action="set-guild-primary" label="Set as primary character" values={{ characterId: character.id }} class="inline-action" buttonClass="btn-subtle" /></div>}<dl><div><dt>Character</dt><dd>{[character.level ? `Level ${character.level}` : null, character.raceName, character.className].filter(Boolean).join(' ') || 'Unknown'}</dd></div><div><dt>{character.ruleset ? 'Ruleset' : 'Realm'}</dt><dd>{character.ruleset || character.realm}</dd></div>{character.faction && <div><dt>Faction</dt><dd>{character.faction}</dd></div>}{character.guildName && <div><dt>Guild</dt><dd>{character.guildName}</dd></div>}<div><dt>Guild rank</dt><dd>{character.guildRank || 'None'}</dd></div>{character.equippedItemLevel !== null && <div><dt>Item level</dt><dd>{character.equippedItemLevel}{character.averageItemLevel && character.averageItemLevel !== character.equippedItemLevel ? ` (${character.averageItemLevel} avg)` : ''}</dd></div>}{character.lastLoginAt && <div><dt>Last login</dt><dd><LocalTime value={character.lastLoginAt} fallback="Never" /></dd></div>}<div><dt>Ownership</dt><dd>{character.verified ? 'Verified' : 'Needs verification'}</dd></div></dl>{character.professions.length > 0 && <div class="roster-details-profs">{character.professions.map(profession => { const cap = professionCap(profession.name, profession.maxRank, profession.rank); const qClass = professionQualityClass(profession.rank, cap); return <div class="roster-prof-item"><div class="card-heading"><strong class={qClass}>{profession.name}</strong><span class={`skill-rank ${qClass}`}>{profession.rank !== null ? `${profession.rank} / ${cap}` : 'Learned'}{profession.recipeCount ? ` · ${profession.recipeCount} recipes` : ''}</span></div>{profession.rank !== null ? <progress class={qClass} value={profession.rank} max={cap}></progress> : null}</div>; })}</div>}</div></details>); })}</div>{!characters.length && <p class="notice">{account.charactersSyncedAt ? 'No World of Warcraft: Forever characters were returned by Battle.net for this account yet. Characters must be level 10 or higher and logged out of the game to appear.' : 'Refresh characters from Battle.net to verify your characters.'}</p>}</GuildPanel>
+<GuildPanel id="email-notifications" title="Email notifications" icon="notice">
+  {emailStatusParam === 'verified' && <p class="notice">Your email address has been verified.</p>}
+  {emailStatusParam === 'expired' && <p class="notice">That verification link has expired. Send a new one below.</p>}
+  {emailStatusParam === 'invalid' && <p class="notice">That verification link is invalid.</p>}
+  {account.email ? (
+    <div style="margin-bottom: 14px;">
+      <p>
+        <strong>{account.email}</strong>{' '}
+        <span class={`badge ${account.emailVerified ? 'quality-uncommon' : 'quality-legendary'}`}>
+          {account.emailVerified ? 'Verified' : 'Pending verification'}
+        </span>
+      </p>
+      <div class="row-actions" style="margin-top: 10px;">
+        {!account.emailVerified && (
+          <ActionForm action="set-notification-email" label="Resend verification link" values={{ email: account.email }} class="inline-action" buttonClass="btn-subtle" />
+        )}
+        <ActionForm action="opt-out-email" label="Disable emails" class="inline-action" buttonClass="btn-subtle btn-subtle-danger" />
+      </div>
+    </div>
+  ) : (
+    <p class="notice" style="margin-bottom: 14px;">{account.emailOptedOut ? 'Email notifications are turned off. You can add and verify an email anytime below.' : 'No email address set.'}</p>
+  )}
+  <ActionForm action="set-notification-email" label={account.email ? 'Update email' : 'Add email'} class="stacked-form">
+    <label>Email address<input name="email" type="email" maxlength="254" required value={account.email || ''} placeholder="you@example.com" autocomplete="email" /></label>
+  </ActionForm>
 </GuildPanel>
-<GuildPanel id="sync-history" title="Sync history" icon="notice"><div class="record-list">{syncs.map(sync => <article class="record-row"><div><h3>{sync.summary}</h3><p><span class="badge">{sync.status}</span></p><dl><div><dt>Source capture</dt><dd>{date(sync.capturedAt)}</dd></div><div><dt>Website received</dt><dd>{date(sync.receivedAt)}</dd></div></dl></div></article>)}</div>{!syncs.length && <p class="notice">No uploads yet. Capture a snapshot in the addon, then send it with the bridge.</p>}</GuildPanel>
+<GuildPanel id="addon-sync" title="Addon Sync" icon="notice">
+<section id="desktop-bridge" class="desktop-bridge" hidden aria-labelledby="desktop-bridge-heading">
+  <h3 id="desktop-bridge-heading">Desktop companion sync</h3>
+  <dl>
+    <div><dt>SavedVariables file</dt><dd id="bridge-file">Not selected</dd></div>
+    <div><dt>Auto-sync watcher</dt><dd id="bridge-watch-state">Stopped</dd></div>
+    <div><dt>Last sync</dt><dd id="bridge-last-sync">Never</dd></div>
+  </dl>
+  <div class="row-actions">
+    <button id="bridge-pick-file" class="arcane-btn arcane-btn-secondary" type="button">Choose HelpingHand.lua</button>
+    <button id="bridge-sync-now" class="arcane-btn" type="button">Sync now</button>
+    <button id="bridge-toggle-watch" class="arcane-btn arcane-btn-secondary" type="button">Start auto-sync</button>
+  </div>
+  <p id="bridge-status-message" class="form-message" role="status" aria-live="polite"></p>
+</section>
+{account.role ? <div class="sync-instructions"><ol><li>Install the Helping Hand addon in your game's <code>Interface/AddOns</code> folder.</li><li>Capture your data in-game (or open your bank, mailbox, or trades on a bank character).</li><li>Reload the game interface (<code>/reload</code>) or log out, then sync in the Helping Hand desktop app.</li></ol><div class="row-actions"><a class="arcane-btn arcane-btn-secondary" href="/downloads/HelpingHand.zip" download>Download addon</a></div></div> : <p class="notice">Verify your character ownership and guild membership before syncing addon data.</p>}
+</GuildPanel>
+<GuildPanel id="sync-history" title="Sync history" icon="notice"><div class="record-list">{pageSyncs.map(sync => <article class="record-row"><div><h3>{sync.summary}</h3><p><span class="badge">{sync.status}</span></p><dl><div><dt>Source capture</dt><dd><LocalTime value={sync.capturedAt} fallback="Never" /></dd></div><div><dt>Website received</dt><dd><LocalTime value={sync.receivedAt} fallback="Never" /></dd></div></dl></div></article>)}</div><Pagination page={syncPage} totalPages={syncTotalPages} totalItems={syncs.length} pageSize={syncPageSize} pageUrl={(p: number) => accountUrl({ spage: p }, '#sync-history')} label="Sync history pagination" />{!syncs.length && <p class="notice">No uploads yet. Capture a snapshot in the addon, then send it with the desktop app.</p>}</GuildPanel>
 </>}
 </Layout>

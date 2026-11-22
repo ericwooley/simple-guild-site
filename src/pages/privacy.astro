@@ -1,0 +1,33 @@
+---
+import Layout from '../layouts/Layout.astro';
+import GuildPanel from '../components/GuildPanel.astro';
+import { getPortalData } from '../server/service.mjs';
+const { account, guild, characters, isGuildMaster } = await getPortalData(Astro.request);
+const guildName = guild?.name || 'Band of the Helping Hand';
+---
+<Layout title="Privacy Policy" account={account} guild={guild} characters={characters} isGuildMaster={isGuildMaster}>
+  <div class="page-heading">
+    <h1>Privacy Policy</h1>
+    <a class="text-link" href="/">Back to Guild Hall</a>
+  </div>
+  <GuildPanel id="privacy-content" title="Effective November 21, 2026" icon="notice">
+    <div class="news-rich-body">
+      <p>This Privacy Policy explains what information the {guildName} website collects and how it is used.</p>
+      <h3>1. Information We Collect</h3>
+      <ul>
+        <li><strong>Battle.net identity:</strong> Your Battle.net account ID, BattleTag, and World of Warcraft character, guild membership, and profession data returned by Blizzard's API.</li>
+        <li><strong>Consent record:</strong> When you agree to our Terms &amp; Conditions and Privacy Policy, we record your agreement timestamp, policy version, and the IP address used at sign-in.</li>
+        <li><strong>Optional email address:</strong> If you opt in to email notifications, we store your email address and verification status.</li>
+        <li><strong>Guild activity:</strong> Helping-hand notes, bank item requests, favorites, news posts, and addon sync snapshots you submit.</li>
+      </ul>
+      <h3>2. How We Use Information</h3>
+      <p>We use your information solely to operate the guild portal, verify guild membership, display roster/bank/profession data to guild members, and send optional email notifications you have verified and enabled.</p>
+      <h3>3. Sharing and Security</h3>
+      <p>We do not sell or rent your personal information. Guild data is restricted to signed-in guild members. Battle.net credentials and database access stay on the server.</p>
+      <h3>4. Your Choices</h3>
+      <p>You can disable or remove your notification email at any time on the My Account page. To request deletion of your account record, contact a Guild Master.</p>
+      <h3>5. Cookies</h3>
+      <p>We use strictly necessary session and OAuth state cookies to keep you signed in securely. We do not use advertising or third-party tracking cookies.</p>
+    </div>
+  </GuildPanel>
+</Layout>

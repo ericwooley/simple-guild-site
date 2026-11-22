@@ -112,40 +112,35 @@ test('anonymous narrow screens expose navigation and withhold guild stock', asyn
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
-test('the Python bridge uploads a SavedVariables outbox without disclosing its token', async ({ page }) => {
+test('sync API accepts a token-authenticated capture and rejects revoked tokens', async ({ page }) => {
   await login(page, 'member');
   const issued = await action(page, { action: 'issue-token', scope: 'member' });
   expect(issued.response.status()).toBe(200);
   const token = issued.body.token;
   const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url'));
-  const directory = await mkdtemp(join(tmpdir(), 'helping-hand-bridge-'));
-  const file = join(directory, 'HelpingHand.lua');
+  const syncUrl = new URL('/api/sync', page.url()).toString();
   try {
     const capture = {
       schemaVersion: 1, snapshotId: `bridge-${randomUUID()}`, capturedAt: Math.floor(Date.now() / 1000),
       source: { addonVersion: '0.1.0', character: { name: 'Test Member', realm: 'Test Realm' }, guild: { name: 'Band of the Helping Hand', realm: 'Test Realm', region: 'us' } },
       characters: [{ name: 'Test Member', realm: 'Test Realm', level: 32, className: 'Mage' }],
     };
-    await writeFile(file, `HelpingHandDB=${luaData({ token, outbox: capture })}`, { mode: 0o600 });
-    const run = () => execute('python3', ['scripts/sync-addon.py', '--file', file, '--url', new URL(page.url()).origin, '--once']);
-    const first = await run();
-    expect(first.stdout).toContain('Website accepted the capture.');
-    expect(first.stdout.includes(token) || first.stderr.includes(token)).toBe(false);
-    await run();
+    const upload = () => page.request.post(syncUrl, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      data: JSON.stringify(capture),
+    });
+    const first = await upload();
+    expect(first.status()).toBe(200);
+    const second = await upload();
+    expect(second.status()).toBe(200);
     await page.reload();
     await expect(page.getByText('Level 32 Mage')).toBeVisible();
     const revoked = await action(page, { action: 'revoke-token', id: claims.jti });
     expect(revoked.response.status()).toBe(200);
-    let rejected = false;
-    try { await run(); } catch (error) {
-      rejected = true;
-      expect(error.stderr).toContain('The website rejected this token.');
-      expect(error.stderr.includes(token)).toBe(false);
-    }
-    expect(rejected).toBe(true);
+    const afterRevoke = await upload();
+    expect(afterRevoke.status()).toBe(401);
   } finally {
     await action(page, { action: 'revoke-token', id: claims.jti });
-    await rm(directory, { recursive: true });
   }
 });
 

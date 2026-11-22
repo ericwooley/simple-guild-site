@@ -19,11 +19,13 @@
     "db:migrate": "node --env-file-if-exists=.env scripts/db-migrate.mjs",
     "db:seed": "node --env-file-if-exists=.env scripts/db-seed.mjs",
     "test:e2e": "node --env-file-if-exists=.env node_modules/@playwright/test/cli.js test",
-    "test:bridge": "python3 -m unittest discover -s tests -p test_bridge.py",
     "test:addon:app": "python3 scripts/test-helping-hand-addon.py",
     "addon:package": "python3 scripts/package-addon.py",
     "setup:local": "node scripts/setup-local.mjs",
-    "test:db": "RUN_DB_TESTS=1 node --env-file-if-exists=.env --test tests/server-integration.test.mjs"
+    "test:db": "RUN_DB_TESTS=1 node --env-file-if-exists=.env --test tests/server-integration.test.mjs",
+    "desktop:dev": "cd desktop && CGO_LDFLAGS=\"-framework UniformTypeIdentifiers\" go run -tags desktop,dev .",
+    "desktop:build": "cd desktop && mkdir -p build/bin && CGO_LDFLAGS=\"-framework UniformTypeIdentifiers\" go build -tags desktop,production -o build/bin/HelpingHand .",
+    "test:desktop": "cd desktop && go test ./..."
   },
   "dependencies": {
     "@astrojs/node": "11.1.14",

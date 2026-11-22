@@ -2,18 +2,114 @@
 import Layout from '../layouts/Layout.astro';
 import GuildCrest from '../components/GuildCrest.astro';
 import GuildPanel from '../components/GuildPanel.astro';
-import Requests from '../components/Requests.astro';
+import NewsEditor from '../components/NewsEditor.astro';
+import CommendationForm from '../components/CommendationForm.astro';
+import LocalTime from '../components/LocalTime.astro';
+import ActivityItem from '../components/ActivityItem.astro';
+import Pagination from '../components/Pagination.astro';
 import { getPortalData } from '../server/service.mjs';
+import { stripHtmlText } from '../server/sanitizeHtml.mjs';
 const data = await getPortalData(Astro.request);
-const { account, characters, bank, professions, requests } = data;
+const { account, guild, characters, roster, activityFeed, isGuildMaster, permissions, motd, guildInfo, news, macros } = data;
+const guildName = guild?.name || 'Band of the Helping Hand';
+const ownIds = new Set(characters.map(c => c.id));
+const ownNames = new Set(characters.map(c => c.name.trim().toLowerCase()));
+const eligibleMembers = roster
+  .filter(m => !ownIds.has(m.id) && !ownNames.has(m.name.trim().toLowerCase()))
+  .sort((a, b) => a.name.localeCompare(b.name))
+  .map(m => ({ id: m.id, name: m.name, rank: m.guildRank || '', level: m.level ?? null }));
+
+const newsPageSize = 5;
+const newsTotalPages = Math.max(1, Math.ceil(news.length / newsPageSize));
+const rawNPage = Number(Astro.url.searchParams.get('npage') || '1');
+const newsPage = Number.isSafeInteger(rawNPage) && rawNPage >= 1 ? Math.min(rawNPage, newsTotalPages) : 1;
+const pageNews = news.slice((newsPage - 1) * newsPageSize, newsPage * newsPageSize);
+
+const actPageSize = 5;
+const actTotalPages = Math.max(1, Math.ceil(activityFeed.length / actPageSize));
+const rawAPage = Number(Astro.url.searchParams.get('apage') || '1');
+const actPage = Number.isSafeInteger(rawAPage) && rawAPage >= 1 ? Math.min(rawAPage, actTotalPages) : 1;
+const pageActivity = activityFeed.slice((actPage - 1) * actPageSize, actPage * actPageSize);
+
+const homeUrl = (overrides: Record<string, number>, hash = '') => {
+  const params = new URLSearchParams();
+  const next = { npage: newsPage, apage: actPage, ...overrides };
+  if (next.npage > 1) params.set('npage', String(next.npage));
+  if (next.apage > 1) params.set('apage', String(next.apage));
+  const qs = params.toString();
+  return `${qs ? `/?${qs}` : '/'}${hash}`;
+};
 ---
-<Layout account={account}>
+<Layout account={account} guild={guild} characters={characters} isGuildMaster={isGuildMaster}>
 <section class="hero" aria-labelledby="guild-title"><img class="hero-landscape" src="/guild-landscape.svg" alt="" width="1440" height="600" fetchpriority="high" /><div class="hero-shade" aria-hidden="true"></div>
-<div class="hero-content"><h1 id="guild-title" class="arcane-title">Band of the<br />Helping Hand</h1><div class="hero-actions"><a href={account ? '/bank' : '/login'} class="arcane-btn">{account ? 'Browse the bank' : 'Sign in'}</a><a href={account ? '/account' : '/professions'} class="arcane-btn arcane-btn-secondary">{account ? 'My characters' : 'Professions'}</a></div></div>
-<div class="hero-standard" aria-hidden="true"><div class="standard-ring"></div><GuildCrest large /></div>
+<div class="hero-content"><h1 id="guild-title" class="arcane-title">{guildName}</h1>{!account && <div class="hero-actions"><a href="/login" class="arcane-btn">Sign in</a></div>}</div>
+<div class="hero-standard" aria-hidden="true"><div class="standard-ring"></div><GuildCrest large logoUrl={guild?.logoUrl} logoName={guild?.logoName} /></div>
 <span class="hero-corner top-left" aria-hidden="true"></span><span class="hero-corner top-right" aria-hidden="true"></span><span class="hero-corner bottom-left" aria-hidden="true"></span><span class="hero-corner bottom-right" aria-hidden="true"></span></section>
 {account ? <>
-<div class="stat-grid"><a class="stat-card" href="/account"><strong>{characters.length}</strong><span>Your characters</span></a><a class="stat-card" href="/bank"><strong>{bank.filter(item => item.favorite).length}</strong><span>Your favorites</span></a><a class="stat-card" href="/professions"><strong>{professions.reduce((count, profession) => count + profession.recipes.filter(recipe => recipe.offered && recipe.canEdit).length, 0)}</strong><span>Your offered crafts</span></a></div>
-<div class="guild-grid"><GuildPanel id="requests" title="Item requests" icon="chest"><Requests requests={requests} owner={account.role === 'owner'} /></GuildPanel><GuildPanel id="characters" title="Your characters" icon="users"><div class="record-list">{characters.map(character => <a class="record-row" href="/account"><div><h3>{character.name}</h3><p>{character.className} · Level {character.level}</p><p>{character.guildRank || 'Guild status unknown'}</p></div>{character.isMain && <span class="badge">Main</span>}</a>)}{!characters.length && <p class="notice">Link verified characters to start your guild profile.</p>}</div><a class="text-link" href="/account">Manage characters and sync</a></GuildPanel></div>
+{(motd || guildInfo) && <GuildPanel id="motd" title="Message of the day" icon="notice">{motd && <p class="motd-text">{motd.text}</p>}{guildInfo && <p class="notice">{guildInfo.text}</p>}{motd?.updatedAt && <p class="data-age">Updated <LocalTime value={motd.updatedAt} /> by {motd.updatedBy}</p>}</GuildPanel>}
+<div class="guild-grid">
+  <GuildPanel id="activity" title="Guild activity" icon="users">
+    <CommendationForm members={eligibleMembers} compact label="Thank" />
+    <div class="activity-feed">
+      {pageActivity.map(entry => <ActivityItem entry={entry} />)}
+      {!activityFeed.length && <p class="notice">No activity yet. Thank a guildmate above or sync bank history.</p>}
+    </div>
+    <Pagination page={actPage} totalPages={actTotalPages} totalItems={activityFeed.length} pageSize={actPageSize} pageUrl={(p: number) => homeUrl({ apage: p }, '#activity')} label="Guild activity pagination" />
+    <a class="text-link" href="/activity">Open full activity feed</a>
+  </GuildPanel>
+  <div class="guild-col">
+    {macros.length > 0 && (
+      <details class="column-picker macro-drawer" id="guild-macros">
+        <summary class="column-picker-summary">
+          <span class="column-picker-label">Guild macros</span>
+          <span class="badge">{macros.length}</span>
+        </summary>
+        <div class="macro-list">
+          {macros.map(macro => (
+            <article class="macro-item">
+              <div class="macro-item-header">
+                <strong>{macro.title}</strong>
+                <button type="button" class="btn-subtle" data-copy-text={macro.body}>Copy</button>
+              </div>
+              <pre class="macro-code">{macro.body}</pre>
+            </article>
+          ))}
+        </div>
+      </details>
+    )}
+    <GuildPanel id="news" title="Guild news" icon="notice">
+    {permissions.manageAnnouncements && (
+      <details class="news-composer">
+        <summary class="btn-subtle">Add guild news</summary>
+        <div class="news-composer-body">
+          <NewsEditor />
+        </div>
+      </details>
+    )}
+    <div class="record-list">
+      {pageNews.map(item => {
+        const excerpt = stripHtmlText(item.html);
+        const postUrl = `/news/${encodeURIComponent(item.id)}`;
+        return (
+        <article class="record-row news-entry">
+          <div class="news-entry-main">
+            <h3><a class="news-link" href={postUrl}>{item.title}</a></h3>
+            <a class="news-excerpt-link" href={postUrl}>
+              <p class="news-excerpt">{excerpt}</p>
+            </a>
+            <div class="news-entry-footer">
+              <p class="data-age">Published <LocalTime value={item.publishedAt} /> by {item.authorName}</p>
+              <a class="text-link news-read-more" href={postUrl}>Read full post</a>
+            </div>
+          </div>
+        </article>
+        );
+      })}
+      {!news.length && <p class="notice">No guild news published yet.</p>}
+    </div>
+    <Pagination page={newsPage} totalPages={newsTotalPages} totalItems={news.length} pageSize={newsPageSize} pageUrl={(p: number) => homeUrl({ npage: p }, '#news')} label="Guild news pagination" />
+  </GuildPanel>
+  </div>
+</div>
 </> : <div class="feature-grid"><a href="/roster" class="feature-card"><h2>Guild roster</h2></a><a href="/bank" class="feature-card"><h2>Guild bank</h2></a><a href="/professions" class="feature-card"><h2>Professions</h2></a></div>}
 </Layout>

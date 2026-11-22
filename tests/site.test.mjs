@@ -26,7 +26,7 @@ for (const route of routes) {
 
 test('anonymous pages only load reachable local assets', {skip: !base && 'Set TEST_BASE_URL to test a running website.'}, async () => {
   const html = await (await fetch(new URL('/', base))).text();
-  const assets = [...html.matchAll(/(?:src|href)="(\/[^"#]+\.(?:css|js|svg)(?:\?[^"#]*)?)"/g)].map(match => match[1]);
+  const assets = [...html.matchAll(/(?:src|href|srcset)="(\/[^"#]+\.(?:css|js|svg|png|webp|ico|webmanifest)(?:\?[^"#]*)?)"/g)].map(match => match[1]);
   assert.ok(assets.length > 0);
   for (const path of new Set(assets)) {
     const response = await fetch(new URL(path, base));

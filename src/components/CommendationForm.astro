@@ -1,0 +1,41 @@
+---
+import ActionForm from './ActionForm.astro';
+const {
+  members = [],
+  compact = false,
+  label = 'Post to activity feed',
+  action = 'add-commendation',
+  values = {},
+  placeholder = 'Type a guildmate’s name to thank…'
+} = Astro.props;
+---
+{members.length > 0 && (
+  <ActionForm action={action} values={values} label={label} class={`activity-form${compact ? ' activity-form-compact' : ''}`}>
+    <slot />
+    <div class="member-picker" data-member-picker>
+      {!compact && <span class="wysiwyg-label">Guild members</span>}
+      <div class="member-picker-box">
+        <div class="member-chips" data-picker-chips></div>
+        <input
+          type="text"
+          class="member-picker-input"
+          data-picker-input
+          placeholder={placeholder}
+          autocomplete="off"
+          aria-label="Search guild members"
+          aria-autocomplete="list"
+        />
+      </div>
+      <div class="member-suggestions" data-picker-list role="listbox" hidden></div>
+      <div data-picker-inputs></div>
+      <script type="application/json" data-picker-data set:html={JSON.stringify(members).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')}></script>
+    </div>
+    {compact ? (
+      <textarea name="message" rows="2" maxlength="500" required aria-label="How did they help you?" placeholder="How did they help you?"></textarea>
+    ) : (
+      <label>How did they help you?
+        <textarea name="message" rows="3" maxlength="500" required placeholder="Crafted my gear, helped with a dungeon run, shared mats…"></textarea>
+      </label>
+    )}
+  </ActionForm>
+)}

@@ -54,22 +54,15 @@ Local fixture configuration does not verify Battle.net ownership.
 2. Execute `pnpm db:seed --config /absolute/path/local-test-config.json`.
 3. Sign into the matching local owner or member test account.
 4. Generate a new token with the required sync permission.
-5. Download the addon and bridge from Addon Sync.
+5. Download the addon from Addon Sync.
 6. Extract the addon into the Forever client's `Interface/AddOns` folder.
 7. Open the game and enable Helping Hand.
 8. Enter `/hh` and paste the token into Connection.
 9. Open your guild roster, Skills window, and an owned profession window.
 10. Select Capture my data, or select Capture guild data as the guild owner.
 11. Enter `/reload` to save the capture.
-12. Execute the bridge on the computer that holds the saved file.
+12. Open the Helping Hand desktop app (`pnpm desktop:build` / `./desktop/build/bin/HelpingHand`), choose your `WTF/Account/ACCOUNT/SavedVariables/HelpingHand.lua` file on the Account page, and click **Sync now** (or **Start auto-sync**).
 
-```sh
-python3 sync-addon.py --file '/path/to/WTF/Account/ACCOUNT/SavedVariables/HelpingHand.lua' --url http://localhost:4321 --once
-```
-
-Python must be installed on the game computer.
-On Windows, use `py -3` if the installer provides that command.
-The bridge sends the selected outbox and keeps the token out of its output.
 Protect the SavedVariables file and its backup because they contain the token.
 
 If the game runs on another computer, forward the workspace's local website port to that computer's localhost port.

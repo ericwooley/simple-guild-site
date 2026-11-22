@@ -1,33 +1,591 @@
 <script>
+  async function submitActionForm(form: HTMLFormElement) {
+    const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+    const select = form.dataset.autoSubmit === 'true' ? form.querySelector<HTMLSelectElement>('select') : null;
+    const message = form.querySelector<HTMLElement>('.form-message');
+    if (!message || button?.disabled || select?.disabled) return;
+    if (select && !select.value) return;
+    const payload: Record<string, unknown> = { action: form.dataset.action };
+    for (const [key, value] of new FormData(form)) {
+      if (key === 'characterIds') {
+        const list = Array.isArray(payload.characterIds) ? (payload.characterIds as string[]) : [];
+        list.push(String(value));
+        payload.characterIds = list;
+      } else {
+        payload[key] = key === 'quantity' || key === 'rankIndex' ? Number(value) : ['offered', 'assigned'].includes(key) ? value === 'true' : value;
+      }
+    }
+    form.querySelectorAll<HTMLInputElement>('input[type="checkbox"][name]').forEach((checkbox) => {
+      payload[checkbox.name] = checkbox.checked;
+    });
+    if (button) button.disabled = true;
+    if (select) select.disabled = true;
+    form.setAttribute('aria-busy', 'true');
+    message.textContent = 'Saving…';
+    try {
+      const response = await fetch('/api/actions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.message || 'Unable to save. Try again.');
+      message.textContent = result.message || 'Saved.';
+      if (result.verificationUrl && typeof result.verificationUrl === 'string') {
+        const link = document.createElement('a');
+        link.href = result.verificationUrl;
+        link.className = 'text-link';
+        link.style.marginLeft = '8px';
+        link.textContent = 'Verify email now';
+        message.appendChild(link);
+        if (button) button.disabled = false;
+        return;
+      }
+      if (result.token) {
+        const reveal = document.querySelector<HTMLElement>('#token-reveal');
+        const output = document.querySelector<HTMLTextAreaElement>('#new-token');
+        if (reveal && output) { output.value = result.token; reveal.hidden = false; output.focus(); output.select(); }
+        if (button) button.disabled = true;
+        return;
+      }
+      if (result.redirect && typeof result.redirect === 'string' && result.redirect.startsWith('/') && !result.redirect.startsWith('//')) location.assign(result.redirect);
+      else location.reload();
+    } catch (error) {
+      message.textContent = error instanceof Error ? error.message : 'Unable to save. Try again.';
+      message.setAttribute('role', 'alert');
+      if (button) button.disabled = false;
+      if (select) select.disabled = false;
+    } finally { form.removeAttribute('aria-busy'); }
+  }
+  document.querySelectorAll<HTMLDetailsElement>('[data-notif-menu]').forEach((menu) => {
+    const badge = menu.querySelector<HTMLElement>('[data-notif-badge]');
+    const markAllBtn = menu.querySelector<HTMLButtonElement>('[data-notif-mark-all]');
+    const markRead = async (id?: string) => {
+      try {
+        await fetch('/api/actions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(id ? { action: 'mark-notifications-read', id } : { action: 'mark-notifications-read' }),
+          keepalive: true,
+        });
+      } catch {}
+    };
+    markAllBtn?.addEventListener('click', async () => {
+      await markRead();
+      badge?.remove();
+      markAllBtn.remove();
+      menu.querySelectorAll('.notif-unread').forEach((el) => el.classList.remove('notif-unread'));
+      menu.querySelectorAll('.notif-dot').forEach((el) => el.remove());
+    });
+    menu.querySelectorAll<HTMLElement>('[data-notif-item]').forEach((item) => {
+      item.addEventListener('click', () => {
+        if (!item.classList.contains('notif-unread')) return;
+        const id = item.dataset.notifItem;
+        item.classList.remove('notif-unread');
+        item.querySelector('.notif-dot')?.remove();
+        void markRead(id);
+      });
+    });
+    document.addEventListener('click', (event) => {
+      if (menu.open && !menu.contains(event.target as Node)) menu.open = false;
+    });
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-copy-text]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const text = btn.dataset.copyText || '';
+      if (!text) return;
+      let copied = false;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          copied = true;
+        }
+      } catch {}
+      if (!copied) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { copied = document.execCommand('copy'); } catch {}
+        ta.remove();
+      }
+      const prev = btn.textContent || 'Copy';
+      btn.textContent = copied ? 'Copied!' : 'Copy failed';
+      setTimeout(() => { btn.textContent = prev; }, 1800);
+    });
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-fav-toggle]').forEach((btn) => {
+    btn.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (btn.disabled) return;
+      const itemKey = btn.dataset.favToggle;
+      if (!itemKey) return;
+      const wasFav = btn.getAttribute('aria-pressed') === 'true';
+      const nextFav = !wasFav;
+      btn.setAttribute('aria-pressed', nextFav ? 'true' : 'false');
+      btn.title = nextFav ? 'Remove favorite' : 'Add favorite';
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/actions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'favorite', itemKey })
+        });
+        const result = await res.json();
+        if (!res.ok || !result.ok) throw new Error(result.message || 'Could not update favorite.');
+        if (!nextFav && new URLSearchParams(location.search).get('favorites') === '1') {
+          btn.closest('.roster-row')?.remove();
+        }
+      } catch {
+        btn.setAttribute('aria-pressed', wasFav ? 'true' : 'false');
+        btn.title = wasFav ? 'Remove favorite' : 'Add favorite';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+  document.querySelectorAll<HTMLFormElement>('form.filter-bar, form[data-auto-filter]').forEach((form) => {
+    let timer: number | undefined;
+    const submitNow = () => {
+      if (timer) window.clearTimeout(timer);
+      form.requestSubmit();
+    };
+    form.querySelectorAll<HTMLSelectElement | HTMLInputElement>('select, input').forEach((field) => {
+      if (field instanceof HTMLInputElement && field.type === 'hidden') return;
+      const isInstant = field instanceof HTMLSelectElement || field.type === 'checkbox' || field.type === 'date';
+      if (isInstant) {
+        field.addEventListener('change', submitNow);
+      } else {
+        field.addEventListener('input', () => {
+          if (timer) window.clearTimeout(timer);
+          timer = window.setTimeout(submitNow, 350);
+        });
+        field.addEventListener('search', submitNow);
+      }
+    });
+  });
+  document.querySelectorAll<HTMLDialogElement>('dialog[data-auto-open="true"]').forEach((dialog) => {
+    if (!dialog.open && typeof dialog.showModal === 'function') dialog.showModal();
+    dialog.addEventListener('cancel', (event) => { event.preventDefault(); });
+  });
+  document.querySelectorAll<HTMLTimeElement>('time[data-local-time][datetime]').forEach((el) => {
+    const dt = new Date(el.dateTime);
+    if (!Number.isNaN(dt.getTime())) {
+      el.textContent = dt.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    }
+  });
+  document.querySelectorAll<HTMLElement>('[data-sortable-table]').forEach((table) => {
+    const buttons = [...table.querySelectorAll<HTMLButtonElement>(':scope > .roster-table-header .sort-header[data-sort-col]')];
+    if (!buttons.length) return;
+    buttons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const col = btn.dataset.sortCol!;
+        const type = btn.dataset.sortType || 'text';
+        const defaultDir = btn.dataset.sortDefault || (type === 'num' ? 'desc' : 'asc');
+        const currentDir = btn.dataset.sortDir;
+        const nextDir = currentDir ? (currentDir === 'asc' ? 'desc' : 'asc') : defaultDir;
+
+        buttons.forEach((b) => {
+          delete b.dataset.sortDir;
+          b.removeAttribute('aria-sort');
+        });
+        btn.dataset.sortDir = nextDir;
+        btn.setAttribute('aria-sort', nextDir === 'asc' ? 'ascending' : 'descending');
+
+        const rows = [...table.querySelectorAll<HTMLElement>(':scope > .roster-row')];
+        const mult = nextDir === 'asc' ? 1 : -1;
+        rows.sort((a, b) => {
+          const av = (a.dataset[`s${col}`] ?? '').trim();
+          const bv = (b.dataset[`s${col}`] ?? '').trim();
+          const aEmpty = av === '' || av === 'N/A';
+          const bEmpty = bv === '' || bv === 'N/A';
+          if (aEmpty && bEmpty) return 0;
+          if (aEmpty) return 1;
+          if (bEmpty) return -1;
+          if (type === 'num') {
+            const an = Number(av);
+            const bn = Number(bv);
+            if (an !== bn) return (an - bn) * mult;
+          } else {
+            const cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
+            if (cmp !== 0) return cmp * mult;
+          }
+          return (a.dataset.sName ?? '').localeCompare(b.dataset.sName ?? '', undefined, { sensitivity: 'base' });
+        });
+        rows.forEach((row) => table.appendChild(row));
+      });
+    });
+  });
+  document.querySelectorAll<HTMLElement>('[data-column-picker]').forEach((picker) => {
+    const key = `hh_cols_v3_${picker.dataset.columnPicker}`;
+    const targetId = picker.dataset.target || '';
+    const table = targetId ? document.getElementById(targetId) : null;
+    if (!table) return;
+    const boxes = [...picker.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+    const forceCol = picker.dataset.forceCol || '';
+
+    const loadSaved = (): Set<string> | null => {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return new Set(parsed.filter((v): v is string => typeof v === 'string'));
+      } catch {}
+      return null;
+    };
+
+    const save = (visible: Set<string>) => {
+      try { localStorage.setItem(key, JSON.stringify([...visible])); } catch {}
+    };
+
+    const countEl = picker.querySelector<HTMLElement>('[data-col-count]');
+
+    const apply = (persist = false) => {
+      const visible = new Set(boxes.filter((b) => b.checked).map((b) => b.value));
+      table.dataset.hasProfCols = visible.size > 0 ? '1' : '0';
+      if (visible.size > 0) table.style.setProperty('--prof-cols', String(visible.size));
+      else table.style.removeProperty('--prof-cols');
+      table.querySelectorAll<HTMLElement>('[data-prof-col]').forEach((el) => {
+        el.hidden = !visible.has(el.dataset.profCol || '');
+      });
+      if (countEl) countEl.textContent = `${visible.size} shown`;
+      if (persist) save(visible);
+    };
+
+    const saved = loadSaved();
+    if (saved) {
+      boxes.forEach((b) => { b.checked = saved.has(b.value) || (Boolean(forceCol) && b.value === forceCol); });
+    }
+    apply(false);
+
+    boxes.forEach((b) => b.addEventListener('change', () => apply(true)));
+    picker.querySelector<HTMLButtonElement>('[data-col-all]')?.addEventListener('click', () => {
+      boxes.forEach((b) => { b.checked = true; });
+      apply(true);
+    });
+    picker.querySelector<HTMLButtonElement>('[data-col-none]')?.addEventListener('click', () => {
+      boxes.forEach((b) => { b.checked = false; });
+      apply(true);
+    });
+  });
+  document.querySelectorAll<HTMLElement>('[data-member-picker]').forEach((root) => {
+    const dataScript = root.querySelector<HTMLScriptElement>('script[data-picker-data]');
+    const chipsEl = root.querySelector<HTMLElement>('[data-picker-chips]');
+    const input = root.querySelector<HTMLInputElement>('[data-picker-input]');
+    const listEl = root.querySelector<HTMLElement>('[data-picker-list]');
+    const inputsEl = root.querySelector<HTMLElement>('[data-picker-inputs]');
+    if (!dataScript || !chipsEl || !input || !listEl || !inputsEl) return;
+    type MemberOption = { id: string; name: string; rank?: string; level?: number | null };
+    let members: MemberOption[] = [];
+    try { members = JSON.parse(dataScript.textContent || '[]'); } catch { members = []; }
+    const selected = new Map<string, MemberOption>();
+    let activeIndex = 0;
+
+    const renderSelected = () => {
+      chipsEl.innerHTML = '';
+      inputsEl.innerHTML = '';
+      for (const m of selected.values()) {
+        const chip = document.createElement('span');
+        chip.className = 'member-chip';
+        chip.textContent = m.name;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'member-chip-remove';
+        remove.setAttribute('aria-label', `Remove ${m.name}`);
+        remove.textContent = '×';
+        remove.addEventListener('click', () => {
+          selected.delete(m.id);
+          renderSelected();
+          renderSuggestions();
+          input.focus();
+        });
+        chip.appendChild(remove);
+        chipsEl.appendChild(chip);
+
+        const hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'characterIds';
+        hidden.value = m.id;
+        inputsEl.appendChild(hidden);
+      }
+      input.placeholder = selected.size ? 'Add another guildmate…' : 'Type a guildmate’s name to add…';
+    };
+
+    const getMatches = () => {
+      const q = input.value.trim().toLowerCase();
+      return members
+        .filter((m) => !selected.has(m.id) && (!q || m.name.toLowerCase().includes(q) || (m.rank || '').toLowerCase().includes(q)))
+        .slice(0, 12);
+    };
+
+    const selectMember = (m: MemberOption) => {
+      if (selected.size >= 40) return;
+      selected.set(m.id, m);
+      input.value = '';
+      activeIndex = 0;
+      renderSelected();
+      renderSuggestions();
+      input.focus();
+    };
+
+    const renderSuggestions = () => {
+      const matches = getMatches();
+      if (!matches.length || document.activeElement !== input) {
+        listEl.hidden = true;
+        listEl.innerHTML = '';
+        return;
+      }
+      if (activeIndex >= matches.length) activeIndex = 0;
+      listEl.innerHTML = '';
+      matches.forEach((m, idx) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `member-option${idx === activeIndex ? ' member-option-active' : ''}`;
+        btn.setAttribute('role', 'option');
+        btn.setAttribute('aria-selected', idx === activeIndex ? 'true' : 'false');
+        const nameSpan = document.createElement('strong');
+        nameSpan.textContent = m.name;
+        btn.appendChild(nameSpan);
+        const meta = [m.level ? `Lv ${m.level}` : '', m.rank || ''].filter(Boolean).join(' · ');
+        if (meta) {
+          const metaSpan = document.createElement('span');
+          metaSpan.className = 'member-option-meta';
+          metaSpan.textContent = meta;
+          btn.appendChild(metaSpan);
+        }
+        btn.addEventListener('mousedown', (e) => { e.preventDefault(); selectMember(m); });
+        listEl.appendChild(btn);
+      });
+      listEl.hidden = false;
+    };
+
+    input.addEventListener('focus', renderSuggestions);
+    input.addEventListener('input', () => { activeIndex = 0; renderSuggestions(); });
+    input.addEventListener('blur', () => { setTimeout(() => { listEl.hidden = true; }, 120); });
+    input.addEventListener('keydown', (e) => {
+      const matches = getMatches();
+      if (e.key === 'ArrowDown' && matches.length) {
+        e.preventDefault();
+        activeIndex = (activeIndex + 1) % matches.length;
+        renderSuggestions();
+      } else if (e.key === 'ArrowUp' && matches.length) {
+        e.preventDefault();
+        activeIndex = (activeIndex - 1 + matches.length) % matches.length;
+        renderSuggestions();
+      } else if (e.key === 'Enter' && matches.length && !listEl.hidden) {
+        e.preventDefault();
+        selectMember(matches[activeIndex]);
+      } else if (e.key === 'Escape') {
+        listEl.hidden = true;
+      } else if (e.key === 'Backspace' && !input.value && selected.size) {
+        const lastKey = [...selected.keys()].pop();
+        if (lastKey) { selected.delete(lastKey); renderSelected(); renderSuggestions(); }
+      }
+    });
+  });
+  document.querySelectorAll<HTMLElement>('[data-wysiwyg]').forEach((root) => {
+    const surface = root.querySelector<HTMLElement>('.wysiwyg-surface');
+    const hidden = root.querySelector<HTMLTextAreaElement>('textarea.wysiwyg-hidden');
+    const counter = root.querySelector<HTMLElement>('[data-wysiwyg-counter]');
+    const maxChars = Number(root.dataset.maxChars || '4000');
+    if (!surface || !hidden) return;
+    const form = root.closest('form');
+    const titleInput = form?.querySelector<HTMLInputElement>('input[name="title"]');
+    const titleCounter = form?.querySelector<HTMLElement>('[data-title-counter]');
+    const updateTitleCounter = () => {
+      if (!titleInput || !titleCounter) return;
+      const len = titleInput.value.length;
+      titleCounter.textContent = `${len} / 120`;
+      titleCounter.classList.toggle('char-counter-over', len > 120);
+    };
+    titleInput?.addEventListener('input', updateTitleCounter);
+    updateTitleCounter();
+
+    const cleanHtmlForSync = (el: HTMLElement) => {
+      const clone = el.cloneNode(true) as HTMLElement;
+      clone.querySelectorAll('*').forEach((node) => {
+        const tag = node.tagName.toLowerCase();
+        if (tag === 'script' || tag === 'style' || tag === 'meta' || tag === 'iframe') { node.remove(); return; }
+        const href = tag === 'a' ? node.getAttribute('href') : null;
+        [...node.attributes].forEach((attr) => node.removeAttribute(attr.name));
+        if (href && /^https?:\/\//i.test(href.trim())) node.setAttribute('href', href.trim());
+      });
+      return clone.innerHTML;
+    };
+
+    const sync = () => {
+      const text = (surface.innerText || surface.textContent || '').replace(/\s+/g, ' ').trim();
+      const len = text.length;
+      if (counter) {
+        counter.textContent = `${len.toLocaleString()} / ${maxChars.toLocaleString()}`;
+        counter.classList.toggle('char-counter-over', len > maxChars);
+      }
+      hidden.value = text ? cleanHtmlForSync(surface) : '';
+      return len;
+    };
+    surface.addEventListener('input', sync);
+    surface.addEventListener('blur', sync);
+    surface.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const htmlData = e.clipboardData?.getData('text/html') ?? '';
+      const textData = e.clipboardData?.getData('text/plain') ?? '';
+      const sel = window.getSelection();
+      if (!sel || !sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      if (!surface.contains(range.commonAncestorContainer)) return;
+      range.deleteContents();
+      if (htmlData) {
+        const parsed = new DOMParser().parseFromString(htmlData, 'text/html');
+        const cleaned = cleanHtmlForSync(parsed.body);
+        const safeDoc = new DOMParser().parseFromString(cleaned, 'text/html');
+        const frag = document.createDocumentFragment();
+        while (safeDoc.body.firstChild) frag.appendChild(safeDoc.body.firstChild);
+        range.insertNode(frag);
+        range.collapse(false);
+      } else if (textData) {
+        const textNode = document.createTextNode(textData);
+        range.insertNode(textNode);
+        range.setStartAfter(textNode);
+        range.collapse(true);
+      }
+      sel.removeAllRanges();
+      sel.addRange(range);
+      sync();
+    });
+    sync();
+    const linkBar = root.querySelector<HTMLElement>('[data-wysiwyg-link-bar]');
+    const linkUrlInput = root.querySelector<HTMLInputElement>('[data-link-url]');
+    const linkTextInput = root.querySelector<HTMLInputElement>('[data-link-text]');
+    const linkInsertBtn = root.querySelector<HTMLButtonElement>('[data-link-insert]');
+    const linkCancelBtn = root.querySelector<HTMLButtonElement>('[data-link-cancel]');
+    let savedRange: Range | null = null;
+
+    const closeLinkBar = () => {
+      if (linkBar) linkBar.hidden = true;
+      if (linkUrlInput) linkUrlInput.value = '';
+      if (linkTextInput) linkTextInput.value = '';
+      savedRange = null;
+    };
+
+    const insertLink = () => {
+      if (!linkUrlInput) return;
+      let rawUrl = linkUrlInput.value.trim();
+      if (!rawUrl) { linkUrlInput.focus(); return; }
+      if (!/^https?:\/\//i.test(rawUrl)) rawUrl = `https://${rawUrl}`;
+      let safeUrl = '';
+      try {
+        const parsed = new URL(rawUrl);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
+        safeUrl = parsed.href;
+      } catch {
+        linkUrlInput.focus();
+        return;
+      }
+      const label = (linkTextInput?.value.trim() || '') || (savedRange ? savedRange.toString().trim() : '') || safeUrl;
+      surface.focus();
+      const sel = window.getSelection();
+      if (sel && savedRange && surface.contains(savedRange.commonAncestorContainer)) {
+        sel.removeAllRanges();
+        sel.addRange(savedRange);
+      }
+      const anchor = document.createElement('a');
+      anchor.href = safeUrl;
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+      anchor.textContent = label;
+      if (sel && sel.rangeCount > 0 && surface.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(anchor);
+        const space = document.createTextNode(' ');
+        anchor.after(space);
+        range.setStartAfter(space);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } else {
+        surface.appendChild(anchor);
+        surface.appendChild(document.createTextNode(' '));
+      }
+      closeLinkBar();
+      sync();
+    };
+
+    linkInsertBtn?.addEventListener('click', insertLink);
+    linkCancelBtn?.addEventListener('click', () => { closeLinkBar(); surface.focus(); });
+    [linkUrlInput, linkTextInput].forEach((inp) => {
+      inp?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); insertLink(); }
+        else if (e.key === 'Escape') { e.preventDefault(); closeLinkBar(); surface.focus(); }
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>('[data-cmd]').forEach((btn) => {
+      btn.addEventListener('mousedown', (e) => e.preventDefault());
+      btn.addEventListener('click', () => {
+        const cmd = btn.dataset.cmd!;
+        if (cmd === 'createLink') {
+          if (!linkBar || !linkUrlInput) return;
+          if (!linkBar.hidden) { closeLinkBar(); surface.focus(); return; }
+          const sel = window.getSelection();
+          if (sel && sel.rangeCount > 0 && surface.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+            savedRange = sel.getRangeAt(0).cloneRange();
+            if (linkTextInput) linkTextInput.value = savedRange.toString().trim();
+          } else {
+            savedRange = null;
+            if (linkTextInput) linkTextInput.value = '';
+          }
+          linkBar.hidden = false;
+          linkUrlInput.focus();
+          return;
+        }
+        surface.focus();
+        document.execCommand(cmd, false, btn.dataset.value || undefined);
+        sync();
+      });
+    });
+    form?.addEventListener('submit', (event) => {
+      const len = sync();
+      if (len === 0) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const msg = form.querySelector<HTMLElement>('.form-message');
+        if (msg) { msg.textContent = 'Enter a news message before publishing.'; msg.setAttribute('role', 'alert'); }
+      } else if (len > maxChars) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const msg = form.querySelector<HTMLElement>('.form-message');
+        if (msg) { msg.textContent = `Message is too long (${len.toLocaleString()} / ${maxChars.toLocaleString()} characters).`; msg.setAttribute('role', 'alert'); }
+      }
+    }, { capture: true });
+  });
   document.querySelectorAll<HTMLFormElement>('form[data-action]').forEach((form) => {
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      void submitActionForm(form);
+    });
+    if (form.dataset.autoSubmit === 'true') {
+      form.querySelector<HTMLSelectElement>('select')?.addEventListener('change', () => {
+        void submitActionForm(form);
+      });
+    }
+  });
+  document.querySelectorAll<HTMLFormElement>('form[data-upload-url]').forEach((form) => {
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
       const message = form.querySelector<HTMLElement>('.form-message');
       if (!button || !message || button.disabled) return;
-      const payload: Record<string, unknown> = { action: form.dataset.action };
-      for (const [key, value] of new FormData(form)) {
-        payload[key] = key === 'quantity' ? Number(value) : ['offered', 'assigned'].includes(key) ? value === 'true' : value;
-      }
       button.disabled = true;
       form.setAttribute('aria-busy', 'true');
-      message.textContent = 'Saving…';
+      message.textContent = 'Uploading…';
       try {
-        const response = await fetch('/api/actions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const response = await fetch(form.dataset.uploadUrl!, { method: 'POST', body: new FormData(form) });
         const result = await response.json();
-        if (!response.ok || !result.ok) throw new Error(result.message || 'Unable to save. Try again.');
-        message.textContent = result.message || 'Saved.';
-        if (result.token) {
-          const reveal = document.querySelector<HTMLElement>('#token-reveal');
-          const output = document.querySelector<HTMLTextAreaElement>('#new-token');
-          if (reveal && output) { output.value = result.token; reveal.hidden = false; output.focus(); output.select(); }
-          button.disabled = true;
-          return;
-        }
-        if (result.redirect && typeof result.redirect === 'string' && result.redirect.startsWith('/') && !result.redirect.startsWith('//')) location.assign(result.redirect);
-        else location.reload();
+        if (!response.ok || !result.ok) throw new Error(result.message || 'Unable to upload. Try again.');
+        message.textContent = result.message || 'Uploaded.';
+        location.reload();
       } catch (error) {
-        message.textContent = error instanceof Error ? error.message : 'Unable to save. Try again.';
+        message.textContent = error instanceof Error ? error.message : 'Unable to upload. Try again.';
         message.setAttribute('role', 'alert');
         button.disabled = false;
       } finally { form.removeAttribute('aria-busy'); }
@@ -40,5 +598,188 @@
     try { await navigator.clipboard.writeText(output.value); status.textContent = 'Copied. Paste this token into the addon settings.'; }
     catch { output.focus(); output.select(); status.textContent = 'Select and copy the token manually.'; }
   });
+  window.addEventListener('keydown', (e) => {
+    if (((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'r') || e.key === 'F5') {
+      e.preventDefault();
+      window.location.reload();
+    }
+  });
   window.addEventListener('pagehide', () => { const output = document.querySelector<HTMLTextAreaElement>('#new-token'); if (output) output.value = ''; });
+  type WailsBridge = {
+    GetBridgeStatus: () => Promise<BridgeStatus>;
+    PickSavedVariablesFile: () => Promise<BridgeStatus>;
+    UpdateSettings: (autoSyncOnStart: boolean, pollIntervalSeconds: number, savedVariablesPath: string) => Promise<BridgeStatus>;
+    SyncNow: () => Promise<BridgeStatus>;
+    StartWatching: () => Promise<BridgeStatus>;
+    StopWatching: () => Promise<BridgeStatus>;
+    StartBattleNetLogin: () => Promise<boolean>;
+  };
+  type BridgeStatus = {
+    available: boolean;
+    savedVariablesPath: string;
+    autoSyncOnStart: boolean;
+    pollIntervalSeconds: number;
+    watching: boolean;
+    openSettings?: boolean;
+    lastSyncedAt: string;
+    lastSummary: string;
+    lastError: string;
+  };
+  const wailsApp = (window as unknown as { go?: { main?: { App?: WailsBridge } } }).go?.main?.App;
+  if (wailsApp) {
+    const settingsDialog = document.querySelector<HTMLDialogElement>('#desktop-settings-dialog');
+    const settingsForm = document.querySelector<HTMLFormElement>('#desktop-settings-form');
+    const autoSyncInput = document.querySelector<HTMLInputElement>('#setting-autosync');
+    const intervalInput = document.querySelector<HTMLInputElement>('#setting-interval');
+    const filePathInput = document.querySelector<HTMLInputElement>('#setting-filepath');
+    const settingsStatus = document.querySelector<HTMLElement>('#desktop-settings-status');
+    const openDesktopSettings = async (prefetched?: BridgeStatus) => {
+      if (!settingsDialog) return;
+      try {
+        const status = prefetched ?? await wailsApp.GetBridgeStatus();
+        if (autoSyncInput) autoSyncInput.checked = Boolean(status.autoSyncOnStart);
+        if (intervalInput) intervalInput.value = String(status.pollIntervalSeconds || 5);
+        if (filePathInput) filePathInput.value = status.savedVariablesPath || '';
+        if (settingsStatus) settingsStatus.textContent = '';
+      } catch {}
+      if (!settingsDialog.open) settingsDialog.showModal();
+    };
+    window.addEventListener('keydown', (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === ',') {
+        event.preventDefault();
+        void openDesktopSettings();
+      }
+    });
+    let onBridgeStatus: ((status: BridgeStatus) => void) | null = null;
+    const pollBridge = async () => {
+      try {
+        const status = await wailsApp.GetBridgeStatus();
+        onBridgeStatus?.(status);
+        if (status.openSettings) void openDesktopSettings(status);
+      } catch {}
+    };
+    setInterval(() => { void pollBridge(); }, 1500);
+    document.querySelector<HTMLButtonElement>('#desktop-settings-close')?.addEventListener('click', () => settingsDialog?.close());
+    document.querySelector<HTMLButtonElement>('#setting-pick-file')?.addEventListener('click', async () => {
+      try {
+        const status = await wailsApp.PickSavedVariablesFile();
+        if (filePathInput) filePathInput.value = status.savedVariablesPath || '';
+      } catch {}
+    });
+    settingsForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      try {
+        await wailsApp.UpdateSettings(
+          Boolean(autoSyncInput?.checked),
+          Number(intervalInput?.value || 5),
+          filePathInput?.value || ''
+        );
+        if (settingsStatus) settingsStatus.textContent = 'Settings saved.';
+        setTimeout(() => settingsDialog?.close(), 350);
+      } catch (err) {
+        if (settingsStatus) {
+          settingsStatus.textContent = err instanceof Error ? err.message : 'Unable to save settings.';
+          settingsStatus.setAttribute('role', 'alert');
+        }
+      }
+    });
+    const showPairingBanner = (code: string) => {
+      let banner = document.querySelector<HTMLElement>('#desktop-pairing-banner');
+      if (!code) {
+        banner?.remove();
+        return;
+      }
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'desktop-pairing-banner';
+        banner.setAttribute('role', 'status');
+        banner.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9999;padding:14px 18px;background:#1e1a13;border:1px solid #c7a35e;color:#eedcaa;box-shadow:0 6px 24px rgba(0,0,0,0.6);font-family:system-ui,sans-serif;';
+        document.body.appendChild(banner);
+      }
+      banner.textContent = `Desktop pairing code: ${code} — enter this code in your browser to approve sign-in.`;
+    };
+    const wailsEvents = (window as any).runtime?.EventsOn;
+    if (typeof wailsEvents === 'function') {
+      wailsEvents('bridge:status', (st: any) => showPairingBanner(st?.pairingCode || ''));
+    }
+    const startDesktopSignIn = async (triggerEl: HTMLElement, termsAgreed = false) => {
+      const originalText = triggerEl.textContent || 'Continue with Battle.net';
+      triggerEl.textContent = 'Finish sign-in in your browser…';
+      triggerEl.setAttribute('aria-disabled', 'true');
+      const pollCode = setInterval(async () => {
+        try {
+          const st = await wailsApp.GetBridgeStatus();
+          if (st?.pairingCode) showPairingBanner(st.pairingCode);
+        } catch {}
+      }, 500);
+      try {
+        const ok = await wailsApp.StartBattleNetLogin(termsAgreed);
+        if (ok) location.assign('/account');
+        else triggerEl.textContent = originalText;
+      } catch {
+        triggerEl.textContent = originalText;
+      } finally {
+        clearInterval(pollCode);
+        showPairingBanner('');
+        triggerEl.removeAttribute('aria-disabled');
+      }
+    };
+    document.querySelectorAll<HTMLAnchorElement>('a[href="/auth/battlenet"], a[href="/auth/start"]').forEach((link) => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        void startDesktopSignIn(link, false);
+      });
+    });
+    document.querySelectorAll<HTMLFormElement>('form[action="/auth/battlenet"], form[action="/auth/start"]').forEach((form) => {
+      form.addEventListener('submit', (event) => {
+        if (!form.checkValidity()) return;
+        event.preventDefault();
+        const termsBox = form.querySelector<HTMLInputElement>('input[name="terms"]');
+        const termsAgreed = termsBox ? termsBox.checked : false;
+        const btn = form.querySelector<HTMLElement>('button[type="submit"]') || form;
+        void startDesktopSignIn(btn, termsAgreed);
+      });
+    });
+    const badge = document.querySelector<HTMLElement>('#desktop-app-badge');
+    if (badge) badge.hidden = false;
+    const panel = document.querySelector<HTMLElement>('#desktop-bridge');
+    if (panel) {
+      panel.hidden = false;
+      const fileEl = document.querySelector<HTMLElement>('#bridge-file');
+      const watchEl = document.querySelector<HTMLElement>('#bridge-watch-state');
+      const lastEl = document.querySelector<HTMLElement>('#bridge-last-sync');
+      const msgEl = document.querySelector<HTMLElement>('#bridge-status-message');
+      const pickBtn = document.querySelector<HTMLButtonElement>('#bridge-pick-file');
+      const syncBtn = document.querySelector<HTMLButtonElement>('#bridge-sync-now');
+      const watchBtn = document.querySelector<HTMLButtonElement>('#bridge-toggle-watch');
+      let isWatching = false;
+      const renderBridge = (status: BridgeStatus) => {
+        isWatching = Boolean(status.watching);
+        if (fileEl) fileEl.textContent = status.savedVariablesPath || 'Not selected';
+        if (watchEl) watchEl.textContent = isWatching ? 'Running (checks every 5s)' : 'Stopped';
+        if (lastEl) lastEl.textContent = status.lastSyncedAt ? new Date(status.lastSyncedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'Never';
+        if (watchBtn) watchBtn.textContent = isWatching ? 'Stop auto-sync' : 'Start auto-sync';
+        if (msgEl) {
+          msgEl.textContent = status.lastError || status.lastSummary || '';
+          if (status.lastError) msgEl.setAttribute('role', 'alert');
+          else msgEl.setAttribute('role', 'status');
+        }
+      };
+      onBridgeStatus = renderBridge;
+      void pollBridge();
+      pickBtn?.addEventListener('click', async () => {
+        try { renderBridge(await wailsApp.PickSavedVariablesFile()); } catch (err) { if (msgEl) msgEl.textContent = err instanceof Error ? err.message : 'Could not select file.'; }
+      });
+      syncBtn?.addEventListener('click', async () => {
+        if (!syncBtn) return;
+        syncBtn.disabled = true;
+        if (msgEl) msgEl.textContent = 'Syncing…';
+        try { renderBridge(await wailsApp.SyncNow()); } catch (err) { if (msgEl) { msgEl.textContent = err instanceof Error ? err.message : 'Sync failed.'; msgEl.setAttribute('role', 'alert'); } }
+        finally { syncBtn.disabled = false; }
+      });
+      watchBtn?.addEventListener('click', async () => {
+        try { renderBridge(isWatching ? await wailsApp.StopWatching() : await wailsApp.StartWatching()); } catch {}
+      });
+    }
+  }
 </script>

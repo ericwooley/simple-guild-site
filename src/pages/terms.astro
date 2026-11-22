@@ -1,0 +1,30 @@
+---
+import Layout from '../layouts/Layout.astro';
+import GuildPanel from '../components/GuildPanel.astro';
+import { getPortalData } from '../server/service.mjs';
+const { account, guild, characters, isGuildMaster } = await getPortalData(Astro.request);
+const guildName = guild?.name || 'Band of the Helping Hand';
+---
+<Layout title="Terms & Conditions" account={account} guild={guild} characters={characters} isGuildMaster={isGuildMaster}>
+  <div class="page-heading">
+    <h1>Terms &amp; Conditions</h1>
+    <a class="text-link" href="/">Back to Guild Hall</a>
+  </div>
+  <GuildPanel id="terms-content" title="Effective November 21, 2026" icon="notice">
+    <div class="news-rich-body">
+      <p>By signing in to and using the {guildName} website, you agree to these Terms &amp; Conditions.</p>
+      <h3>1. Eligibility and Accounts</h3>
+      <p>Access is authenticated through Battle.net OAuth. You are responsible for activity performed under your signed-in account and must not attempt to impersonate other players or bypass guild access controls.</p>
+      <h3>2. Community Conduct</h3>
+      <p>All guild news, bank requests, helping-hand notes, and feedback submissions must remain respectful, lawful, and free of harassment, spam, or malicious links. Guild leadership may remove content or revoke access at its discretion.</p>
+      <h3>3. Guild Data and Addon Sync</h3>
+      <p>Character, profession, roster, and guild bank snapshots are provided on a best-effort basis by guild members and Blizzard's public APIs. Data may be delayed, incomplete, or inaccurate, and guild bank requests do not guarantee item delivery.</p>
+      <h3>4. No Warranty</h3>
+      <p>This community site is provided "as is" without warranties of any kind. We are not responsible for service interruptions, data loss, or in-game disputes.</p>
+      <h3>5. Trademarks</h3>
+      <p>World of Warcraft, Battle.net, and Blizzard Entertainment are trademarks or registered trademarks of Blizzard Entertainment, Inc. This guild website is an independent fan community tool and is not affiliated with or endorsed by Blizzard Entertainment.</p>
+      <h3>6. Changes</h3>
+      <p>We may update these terms from time to time. Continued use of the site after changes are posted constitutes acceptance of the updated terms.</p>
+    </div>
+  </GuildPanel>
+</Layout>

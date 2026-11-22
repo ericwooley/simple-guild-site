@@ -20,8 +20,6 @@ assert(loadfile(root .. "/addon/HelpingHand/Collect.lua", "t", env))()
 local H = env.HelpingHand
 H.Initialize()
 assert(H.Identity().name == "First Surname")
-assert(not H.SaveToken("invalid"))
-assert(H.SaveToken("aaa.bbb.ccc"))
 assert(H.Capture(false))
 assert(env.HelpingHandDB.outbox.roster == nil)
 assert(env.HelpingHandDB.outbox.banks == nil)
@@ -43,43 +41,47 @@ env.TOGBankClassic_Guild = {
     GetAltItemsWithOwnHidden = function() error("Never read private stock") end,
 }
 env.TOGBankClassic_Inventory_Store = {
-    HasAlt = function() return true end,
-    IsAltComplete = function() return true end,
+    HasAlt = function(_, guildName, altName) return guildName == "Guild" and altName == "Bank Surname" end,
+    IsAltComplete = function(_, guildName, altName) return guildName == "Guild" and altName == "Bank Surname" end,
 }
 assert(H.Capture(true))
 local bank = env.HelpingHandDB.outbox.banks[1]
-assert(bank.viewOnly and bank.complete)
+assert(bank.viewOnly and bank.sourceKind == "ultimate-bank" and bank.itemsKnown == true and bank.complete == false)
 assert(bank.observedAt == nil)
 assert(#bank.items == 1 and bank.items[1].itemId == 118)
 assert(bank.items[1].suffixId == -12 and bank.items[1].enchantId == 33)
 assert(calls == 1)
 env.TOGBankClassic_Guild.GetAltItems = function() return {{ID = 118, Count = -1}} end
 assert(H.Capture(true))
-assert(not env.HelpingHandDB.outbox.banks[1].complete)
+assert(env.HelpingHandDB.outbox.banks[1].itemsKnown == false)
 env.TOGBankClassic_Guild.GetAltItems = function()
     return {{ID = 118, Count = 20}, "malformed row"}
 end
 assert(H.Capture(true))
-assert(not env.HelpingHandDB.outbox.banks[1].complete, "Malformed rows must preserve prior stock")
+assert(env.HelpingHandDB.outbox.banks[1].itemsKnown == false, "Malformed rows must preserve prior stock")
 assert(#env.HelpingHandDB.outbox.banks[1].items == 1)
 env.TOGBankClassic_Guild.GetAltItems = function()
     return {[1] = {ID = 118, Count = 20}, [3] = {ID = 999, Count = 2}}
 end
 assert(H.Capture(true))
-assert(not env.HelpingHandDB.outbox.banks[1].complete, "Sparse rows must preserve prior stock")
+assert(env.HelpingHandDB.outbox.banks[1].itemsKnown == false, "Sparse rows must preserve prior stock")
 assert(#env.HelpingHandDB.outbox.banks[1].items == 2, "Keep valid records after a hole")
 env.TOGBankClassic_Guild.GetAltItems = function() return {} end
 assert(H.Capture(true))
 assert(#env.HelpingHandDB.outbox.banks[1].items == 0)
-assert(env.HelpingHandDB.outbox.banks[1].complete)
+assert(env.HelpingHandDB.outbox.banks[1].itemsKnown == true)
 env.TOGBankClassic_Inventory_Store.IsAltComplete = function() return false end
 assert(H.Capture(true))
-assert(not env.HelpingHandDB.outbox.banks[1].complete)
+assert(env.HelpingHandDB.outbox.banks[1].itemsKnown == false)
 env.TOGBankClassic_Guild.GetAltItems = function() error("Unavailable") end
 assert(H.Capture(true))
-assert(env.HelpingHandDB.outbox.banks == nil)
+assert(env.HelpingHandDB.outbox.banks[1].viewOnly == true and env.HelpingHandDB.outbox.banks[1].itemsKnown == false)
+env.GetGuildRosterMOTD = function() return "Raid night Friday!" end
+env.GetGuildInfoText = function() return "Be kind and help each other." end
 env.GetGuildInfo = function() return "Guild", "Member", 3 end
-assert(not H.Capture(true))
+assert(H.Capture(true))
+assert(env.HelpingHandDB.outbox.guildMeta.motd == "Raid night Friday!")
+assert(env.HelpingHandDB.outbox.guildMeta.infoText == "Be kind and help each other.")
 env.C_SkillInfo = {GetSkillLineInfoByID = function(id)
     if id == 171 then return {name = "Alchemy", rank = 150, maxRank = 225} end
 end}

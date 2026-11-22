@@ -1,0 +1,68 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import GuildPanel from '../../components/GuildPanel.astro';
+import CommendationForm from '../../components/CommendationForm.astro';
+import ActionForm from '../../components/ActionForm.astro';
+import { getGuildFeedbackData } from '../../server/service.mjs';
+
+const guildSlug = Astro.params.guildSlug || '';
+const { guild, account, ownCharacters, members, battleNetConfigured, localTestLogin } = await getGuildFeedbackData(Astro.request, guildSlug);
+const returnUrl = guild ? `/${encodeURIComponent(guild.slug)}/feedback` : '/';
+---
+<Layout title={guild ? `Thank ${guild.name}` : 'Guild feedback'} account={null} guild={guild} characters={[]} isGuildMaster={false}>
+  <div class="page-heading">
+    <h1>{guild ? guild.name : 'Guild not found'}</h1>
+    {account && <ActionForm action="logout" label="Sign out" class="inline-action" buttonClass="btn-subtle" />}
+  </div>
+  {!guild ? (
+    <GuildPanel id="feedback-missing" title="Guild not found" icon="notice">
+      <p class="notice">That guild feedback link could not be found.</p>
+    </GuildPanel>
+  ) : !account ? (
+    <GuildPanel id="feedback-signin" title="Report a helping hand" icon="users">
+      <p class="notice">Did someone from {guild.name} help you out? Sign in with Battle.net to leave them a thank-you note and award them guild reputation.</p>
+      <div class="row-actions">
+        {battleNetConfigured && (
+          <form method="get" action="/auth/battlenet" class="stacked-form">
+            <input type="hidden" name="next" value={returnUrl} />
+            <label class="check-label">
+              <input type="checkbox" name="terms" value="1" required />
+              <span>I agree to the <a class="text-link" href="/terms" target="_blank" rel="noopener">Terms &amp; Conditions</a> and <a class="text-link" href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</span>
+            </label>
+            <button type="submit" class="arcane-btn">Sign in with Battle.net</button>
+          </form>
+        )}
+        {localTestLogin && (
+          <ActionForm action="local-login" label="Test as guild member" values={{ persona: 'member' }} />
+        )}
+      </div>
+    </GuildPanel>
+  ) : (
+    <GuildPanel id="feedback-form" title="Report a helping hand" icon="users">
+      <p class="notice">Signed in as <strong>{account.battleTag}</strong>. Your note will appear in {guild.name}’s activity feed and award reputation to the member you thank.</p>
+      {members.length > 0 ? (
+        <CommendationForm
+          action="add-external-commendation"
+          values={{ guildId: guild.id }}
+          members={members}
+          label="Send thank-you note"
+          placeholder="Type the guild member’s name who helped you…"
+        >
+          {ownCharacters.length > 0 && (
+            <label>Your character
+              <select name="authorCharacterId">
+                {ownCharacters.map(c => (
+                  <option value={c.id} selected={c.isMain}>
+                    {c.name}{c.level ? ` (Lv ${c.level}${c.className ? ` ${c.className}` : ''})` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </CommendationForm>
+      ) : (
+        <p class="notice">No guild members are available to select yet.</p>
+      )}
+    </GuildPanel>
+  )}
+</Layout>
