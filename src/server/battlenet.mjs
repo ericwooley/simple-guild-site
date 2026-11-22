@@ -459,7 +459,7 @@ export async function syncBattleNetGuildMembership(db, accountId, region, charac
     }
 
     let rosterChanged = false;
-    if (rosterFresh) {
+    if (rosterFresh && !ambiguousUnbound) {
       await db.query('UPDATE guilds SET bnet_roster_synced_at=$2, blizzard_guild_id=COALESCE(blizzard_guild_id, $3) WHERE id=$1', [guildRowId, fetchStartedAt, rosterGuildId]);
       // Match existing verified guild characters strictly by stable Blizzard ID (never by realm+name alone).
       const existingByBlizzardId = new Map();

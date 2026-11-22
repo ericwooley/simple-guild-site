@@ -59,7 +59,7 @@ function resolveAccess(identity, characters, state, activeGuildId) {
   const selectedGuildId = selected?.guildSlug ? `bnet:${selected.region || 'us'}:${selected.guildSlug}` : null;
   if (!selected || selectedGuildId !== activeGuildId) return {isGuildMaster:false,permissions:{...NO_PERMISSIONS},selected};
   if (activeGuildId.startsWith('bnet:')) {
-    if (!state?.blizzardGuildId || (selected.guildId && Number(state.blizzardGuildId) !== Number(selected.guildId))) {
+    if (!state?.blizzardGuildId || !selected.guildId || Number(state.blizzardGuildId) !== Number(selected.guildId)) {
       return {isGuildMaster:false,permissions:{...NO_PERMISSIONS},selected};
     }
   }
@@ -107,7 +107,7 @@ async function resolveActiveGuildId(db, identity, accountCharactersRaw) {
   if (!membership) return null;
   if (candidate.startsWith('bnet:')) {
     if (membership.blizzard_guild_id === null || membership.blizzard_guild_id === undefined) return null;
-    if (selected.guildId && Number(membership.blizzard_guild_id) !== Number(selected.guildId)) return null;
+    if (!selected.guildId || Number(membership.blizzard_guild_id) !== Number(selected.guildId)) return null;
   }
   identity.role = membership.role;
   return membership.guild_id;
@@ -116,8 +116,8 @@ function matchesPortalGuild(c, activeGuildSlug, guildRegion, blizzardGuildId) {
   if (!activeGuildSlug) return true;
   if (c.guildSlug !== activeGuildSlug) return false;
   if (c.region && c.region !== guildRegion) return false;
-  if (blizzardGuildId !== null && blizzardGuildId !== undefined && c.guildId !== null && c.guildId !== undefined) {
-    if (Number(c.guildId) !== Number(blizzardGuildId)) return false;
+  if (blizzardGuildId !== null && blizzardGuildId !== undefined) {
+    if (c.guildId === null || c.guildId === undefined || Number(c.guildId) !== Number(blizzardGuildId)) return false;
   }
   return true;
 }
@@ -202,7 +202,7 @@ export async function getPortalData(request) {
   if (!identity) return output;
   const safeCharacter = (c, state = null, activeGuildSlug = null) => {
     const inActiveGuild = activeGuildSlug ? c.guildSlug === activeGuildSlug : true;
-    return {id:c.id,name:c.name,realm:c.realm,region:c.region ?? 'us',ruleset:c.ruleset ?? null,level:c.level ?? null,className:c.className ?? null,raceName:c.raceName ?? null,faction:c.faction ?? null,guildName:c.guildName ?? null,guildSlug:c.guildSlug ?? null,guildRank:(state && inActiveGuild) ? rankNameFor(state,c.guildRankIndex,c.guildRank ?? null) : (c.guildRank ?? null),guildRankIndex:c.guildRankIndex ?? null,equippedItemLevel:c.equippedItemLevel ?? null,averageItemLevel:c.averageItemLevel ?? null,lastLoginAt:c.lastLoginAt instanceof Date ? c.lastLoginAt.toISOString() : (c.lastLoginAt ?? null),professions:Array.isArray(c.professions) ? c.professions : [],isMain:Boolean(c.isMain),verified:Boolean(c.verified),titles:c.titles ?? [],updatedAt:c.updatedAt instanceof Date ? c.updatedAt.toISOString() : (c.updatedAt ?? null)};
+    return {id:c.id,name:c.name,realm:c.realm,region:c.region ?? 'us',ruleset:c.ruleset ?? null,level:c.level ?? null,className:c.className ?? null,raceName:c.raceName ?? null,faction:c.faction ?? null,guildName:c.guildName ?? null,guildSlug:c.guildSlug ?? null,guildId:c.guildId ?? null,guildRank:(state && inActiveGuild) ? rankNameFor(state,c.guildRankIndex,c.guildRank ?? null) : (c.guildRank ?? null),guildRankIndex:c.guildRankIndex ?? null,equippedItemLevel:c.equippedItemLevel ?? null,averageItemLevel:c.averageItemLevel ?? null,lastLoginAt:c.lastLoginAt instanceof Date ? c.lastLoginAt.toISOString() : (c.lastLoginAt ?? null),professions:Array.isArray(c.professions) ? c.professions : [],isMain:Boolean(c.isMain),verified:Boolean(c.verified),titles:c.titles ?? [],updatedAt:c.updatedAt instanceof Date ? c.updatedAt.toISOString() : (c.updatedAt ?? null)};
   };
   const accountCharactersRows = (await getPool().query(`SELECT id,name,realm,region,ruleset,level,class_name AS "className",race_name AS "raceName",faction,guild_name AS "guildName",guild_slug AS "guildSlug",guild_id AS "guildId",guild_rank AS "guildRank",guild_rank_index AS "guildRankIndex",equipped_item_level AS "equippedItemLevel",average_item_level AS "averageItemLevel",last_login_at AS "lastLoginAt",is_main AS "isMain",verified,updated_at AS "updatedAt" FROM account_characters WHERE account_id=$1 ORDER BY level DESC NULLS LAST,name ASC`,[identity.id])).rows;
   const acctProfMap = await loadAccountCharacterProfessions(getPool(), accountCharactersRows.map(c => c.id));
@@ -967,11 +967,11 @@ export async function handleAction(request, address) {
         if (activeGuildSlug) {
           const stillOwned = target.characterId
             ? (await db.query(
-                `SELECT 1 FROM account_characters WHERE id=$1 AND account_id=$2 AND verified=true AND guild_slug=$3 AND region=$4 AND ($5::bigint IS NULL OR guild_id IS NULL OR guild_id=$5)`,
+                `SELECT 1 FROM account_characters WHERE id=$1 AND account_id=$2 AND verified=true AND guild_slug=$3 AND region=$4 AND ($5::bigint IS NULL OR guild_id=$5)`,
                 [target.characterId, target.accountId, activeGuildSlug, guild.region, guild.blizzard_guild_id ?? null]
               )).rowCount
             : (await db.query(
-                `SELECT 1 FROM account_characters WHERE account_id=$1 AND verified=true AND guild_slug=$2 AND region=$3 AND lower(btrim(name))=$4 AND ($5::bigint IS NULL OR guild_id IS NULL OR guild_id=$5)`,
+                `SELECT 1 FROM account_characters WHERE account_id=$1 AND verified=true AND guild_slug=$2 AND region=$3 AND lower(btrim(name))=$4 AND ($5::bigint IS NULL OR guild_id=$5)`,
                 [target.accountId, activeGuildSlug, guild.region, normalize(target.characterName), guild.blizzard_guild_id ?? null]
               )).rowCount;
           need(stillOwned > 0,'The requested character is no longer verified in this guild. Decline this request instead.',409);

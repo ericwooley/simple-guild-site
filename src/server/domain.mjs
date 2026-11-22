@@ -199,10 +199,11 @@ export function mergeSnapshot(previous, snapshot, receivedAt, accountId) {
     if (typeof value !== 'string') return null;
     const match = /^(\d*):(\d*)$/.exec(value.trim());
     if (!match || (!match[1] && !match[2])) return null;
-    return {
-      version: match[1] ? Number(match[1]) : null,
-      updatedAt: match[2] ? Number(match[2]) : null
-    };
+    const version = match[1] ? Number(match[1]) : null;
+    const updatedAt = match[2] ? Number(match[2]) : null;
+    if (version !== null && (!Number.isSafeInteger(version) || version < 0 || version > 2147483647)) return null;
+    if (updatedAt !== null && (!Number.isSafeInteger(updatedAt) || updatedAt <= 0 || updatedAt > 4102444800)) return null;
+    return { version, updatedAt };
   };
   const isOlderUbVersion = (incomingVer, oldVer) => {
     const a = parseUbVersion(incomingVer);
@@ -243,7 +244,7 @@ export function mergeSnapshot(previous, snapshot, receivedAt, accountId) {
           items: isItemsKnown ? incoming.items : [],
           receivedAt,
           capturedAt: isItemsKnown ? snapshot.capturedAt : null,
-          stockChangedAt: isItemsKnown ? (parsedVer?.updatedAt || snapshot.capturedAt) : null
+          stockChangedAt: isItemsKnown ? (parsedVer?.updatedAt ?? null) : null
         }];
         continue;
       }
@@ -282,11 +283,13 @@ export function mergeSnapshot(previous, snapshot, receivedAt, accountId) {
         }];
         continue;
       }
-      // Never let a malformed/unversioned/older UB snapshot overwrite stock from a known revision.
+      // Never let a malformed/partial/unversioned/older UB snapshot overwrite stock from a known revision.
       const parsedInVer = parseUbVersion(incoming.sourceVersion);
       const parsedOldVer = parseUbVersion(old?.sourceVersion);
       if (oldIsExplicitUB && parsedOldVer) {
-        const missingOrInvalidInVer = !parsedInVer || (parsedOldVer.updatedAt !== null && parsedInVer.updatedAt === null);
+        const missingOrInvalidInVer = !parsedInVer
+          || (parsedOldVer.version !== null && parsedInVer.version === null)
+          || (parsedOldVer.updatedAt !== null && parsedInVer.updatedAt === null);
         if (missingOrInvalidInVer || isOlderUbVersion(incoming.sourceVersion, old.sourceVersion)) {
           if (incoming.viewOnly) {
             state.banks = [...state.banks.filter(b => !sameBank(b)), {
@@ -300,21 +303,13 @@ export function mergeSnapshot(previous, snapshot, receivedAt, accountId) {
         }
       }
       const stockChanged = !oldIsExplicitUB || bankStockSignature(old?.items) !== bankStockSignature(incoming.items);
-      // Only treat sourceVersion change as a stock change when both old and new versions are valid and differ.
-      const versionChanged = Boolean(
-        parsedOldVer && parsedInVer
-        && (
-          (parsedOldVer.version !== null && parsedInVer.version !== null && parsedInVer.version > parsedOldVer.version)
-          || (parsedOldVer.updatedAt !== null && parsedInVer.updatedAt !== null && parsedInVer.updatedAt > parsedOldVer.updatedAt)
-        )
-      );
       // Use Ultimate Bank's publication timestamp (inventoryUpdatedAt) whenever present (including on migrated rows
       // whose stockChangedAt was NULL). When no publication timestamp is available, only advance stockChangedAt if
-      // observed item quantities actually changed from an existing explicit UB record.
+      // observed item quantities actually changed from a prior CONFIRMED explicit UB view (not an itemsKnown=false placeholder).
       let effectiveStockChangedAt = old?.stockChangedAt ?? null;
       if (parsedInVer?.updatedAt && parsedInVer.updatedAt > 0) {
         effectiveStockChangedAt = Math.max(effectiveStockChangedAt ?? 0, parsedInVer.updatedAt);
-      } else if (oldIsExplicitUB && stockChanged) {
+      } else if (oldIsExplicitUB && old?.capturedAt !== null && old?.capturedAt !== undefined && stockChanged) {
         effectiveStockChangedAt = snapshot.capturedAt;
       }
       const effectiveViewOnly = incoming.viewOnly ? true : (canClearViewOnly ? false : Boolean(old?.viewOnly));
