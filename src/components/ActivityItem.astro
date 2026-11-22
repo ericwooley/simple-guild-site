@@ -56,16 +56,30 @@ const badgeByType: Record<string, string> = {
     <div class="activity-header">
       <div class="activity-actors">
         <span class="badge">{badgeByType[entry.txType] || entry.txType}</span>
-        {entry.actorCharacterId
-          ? <a class="profile-link" href={`/character/${encodeURIComponent(entry.actorCharacterId)}`}><strong>{entry.actorName}</strong></a>
-          : <strong>{entry.actorName}</strong>}
-        <span class="activity-verb">{verbByType[entry.txType] || entry.txType}</span>
-        {entry.txType === 'money-withdraw' || entry.txType === 'money-deposit'
-          ? <strong class="donation-value">{entry.moneyFormatted}</strong>
-          : <><strong>{entry.itemName || `Item #${entry.itemId}`}</strong>{entry.quantity > 1 && <span class="activity-verb">×{entry.quantity}</span>}</>}
-        {entry.bankName && <span class="activity-verb">{entry.txType === 'requested' || entry.txType.startsWith('request-') ? `from ${entry.bankName}` : `from ${entry.bankName}`}</span>}
-        {entry.txType !== 'money-withdraw' && entry.totalVendorCopper > 0 && (
-          <span class="donation-value">({entry.vendorFormatted})</span>
+        {entry.txType === 'request-approved' || entry.txType === 'request-declined' ? (
+          <>
+            {entry.actorCharacterId
+              ? <a class="profile-link" href={`/character/${encodeURIComponent(entry.actorCharacterId)}`}><strong>{entry.actorName}</strong></a>
+              : <strong>{entry.actorName}</strong>}
+            <span class="activity-verb">’s request for</span>
+            <strong>{entry.itemName || `Item #${entry.itemId}`}</strong>{entry.quantity > 1 && <span class="activity-verb">×{entry.quantity}</span>}
+            {entry.bankName && <span class="activity-verb">from {entry.bankName}</span>}
+            <span class="activity-verb">{entry.txType === 'request-approved' ? 'was approved' : 'was declined'}</span>
+          </>
+        ) : (
+          <>
+            {entry.actorCharacterId
+              ? <a class="profile-link" href={`/character/${encodeURIComponent(entry.actorCharacterId)}`}><strong>{entry.actorName}</strong></a>
+              : <strong>{entry.actorName}</strong>}
+            <span class="activity-verb">{verbByType[entry.txType] || entry.txType}</span>
+            {entry.txType === 'money-withdraw' || entry.txType === 'money-deposit'
+              ? <strong class="donation-value">{entry.moneyFormatted}</strong>
+              : <><strong>{entry.itemName || `Item #${entry.itemId}`}</strong>{entry.quantity > 1 && <span class="activity-verb">×{entry.quantity}</span>}</>}
+            {entry.bankName && <span class="activity-verb">from {entry.bankName}</span>}
+            {entry.txType !== 'money-withdraw' && entry.totalVendorCopper > 0 && (
+              <span class="donation-value">({entry.vendorFormatted})</span>
+            )}
+          </>
         )}
       </div>
       <div class="activity-meta">
