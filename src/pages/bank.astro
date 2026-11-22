@@ -147,7 +147,7 @@ const qualityClass = (name: string | null | undefined) => name ? `quality-${name
         <span class="badge">{items.length} of {bank.length} {bank.length === 1 ? 'item' : 'items'}</span>
         {openRequestCount > 0 && <a class="badge" href={bankUrl({ tab: 'requests', rpage: 1 })}>{openRequestCount} open {openRequestCount === 1 ? 'request' : 'requests'}</a>}
         {(isGuildMaster || permissions.manageGuildSync) && (bank.length > 0 || bankTransactions.length > 0) && (
-          <ActionForm action="refresh-vendor-prices" label="Refresh item data" class="inline-action" />
+          <ActionForm action="refresh-vendor-prices" label="Refresh AH & item prices" class="inline-action" />
         )}
       </div>
     )}
@@ -263,6 +263,7 @@ const qualityClass = (name: string | null | undefined) => name ? `quality-${name
                   {item.qualityName && <div><dt>Quality</dt><dd class={qualityClass(item.qualityName)}>{item.qualityName}</dd></div>}
                   {typeLabel && <div><dt>Type</dt><dd>{typeLabel}</dd></div>}
                   {item.itemLevel && <div><dt>Item level</dt><dd>{item.itemLevel}{item.requiredLevel ? ` (Requires Lv ${item.requiredLevel})` : ''}</dd></div>}
+                  {item.ahPriceFormatted && <div><dt>AH market value</dt><dd class="donation-value">{item.ahPriceFormatted} each</dd></div>}
                   {item.vendorPriceFormatted && <div><dt>Vendor value</dt><dd class="donation-value">{item.vendorPriceFormatted} each</dd></div>}
                 </dl>
                 {item.banks.map(b => (
@@ -371,7 +372,7 @@ const qualityClass = (name: string | null | undefined) => name ? `quality-${name
                   <button type="button" class="sort-header" data-sort-col="1" data-sort-type="text">Type</button>
                   <button type="button" class="sort-header" data-sort-col="2" data-sort-type="text">Player</button>
                   <button type="button" class="sort-header" data-sort-col="3" data-sort-type="text">Item / Gold</button>
-                  <button type="button" class="sort-header" data-sort-col="4" data-sort-type="num">Vendor value</button>
+                  <button type="button" class="sort-header" data-sort-col="4" data-sort-type="num">AH / Value</button>
                 </div>
                 {pageHistory.map(tx => (
                   <details

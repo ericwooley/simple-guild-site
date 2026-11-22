@@ -20,7 +20,7 @@ import { donationHonorPoints, helpingPointsForLevel, reputationStanding } from '
 import { percentileQualityClass } from './rarity.mjs';
 import { loadAccountCharacterProfessions, loadGuildState, saveGuildState } from './guildStore.mjs';
 import { sanitizeNewsHtml, stripHtmlText } from './sanitizeHtml.mjs';
-import { formatCopper, importBankTransactions, lookupMissingVendorPrices, prefetchVendorPrices, refreshGuildTransactionPrices, saveFetchedCatalogItems } from './itemPrices.mjs';
+import { fetchForeverAhSnapshot, formatCopper, importBankTransactions, loadAhPriceMap, lookupMissingVendorPrices, prefetchVendorPrices, refreshGuildTransactionPrices, resolveGuildAhContext, saveFetchedCatalogItems } from './itemPrices.mjs';
 const empty = () => ({account:null,guild:null,characters:[],roster:[],bank:[],bankTransactions:[],bankContributions:[],requests:[],professions:[],tokens:[],syncs:[],commendations:[],activityFeed:[],isGuildMaster:false,permissions:{approveBankRequests:false,assignTitles:false,manageGuildSync:false,manageAnnouncements:false},ranks:[],motd:null,guildInfo:null,news:[],macros:[],designatedBanks:[]});
 const ALL_PERMISSIONS = {approveBankRequests:true,assignTitles:true,manageGuildSync:true,manageAnnouncements:true};
 const NO_PERMISSIONS = {approveBankRequests:false,assignTitles:false,manageGuildSync:false,manageAnnouncements:false};
@@ -539,9 +539,12 @@ export async function getPortalData(request) {
       )).rows
     : [];
   const catalogById = new Map(catalogRows.map(r => [r.itemId, r]));
+  const ahContext = await resolveGuildAhContext(getPool(), guild);
+  const ahPriceMap = bankItemIds.length ? await loadAhPriceMap(getPool(), bankItemIds, ahContext) : new Map();
   const qualityNames = ['Poor', 'Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Artifact', 'Heirloom'];
   output.bank = rawBank.map(item => {
     const meta = catalogById.get(item.itemId);
+    const ahCopper = ahPriceMap.get(item.itemId) ?? null;
     const qualityName = meta?.quality ?? (Number.isSafeInteger(item.quality) ? qualityNames[item.quality] ?? null : null);
     return {
       ...item,
@@ -551,6 +554,8 @@ export async function getPortalData(request) {
       inventoryType: meta?.inventoryType && meta.inventoryType !== 'Non-equippable' ? meta.inventoryType : null,
       itemLevel: meta?.itemLevel ?? null,
       requiredLevel: meta?.requiredLevel ?? null,
+      ahPriceCopper: ahCopper,
+      ahPriceFormatted: ahCopper ? formatCopper(ahCopper) : null,
       vendorPriceCopper: meta?.sellPriceCopper ?? null,
       vendorPriceFormatted: meta?.sellPriceCopper ? formatCopper(meta.sellPriceCopper) : null
     };
@@ -712,7 +717,11 @@ export async function handleAction(request, address) {
       return { guild, itemIds: [...new Set([...txRows.map(r => r.item_id), ...stockRows.map(r => r.item_id)])] };
     })();
     if (body.action === 'refresh-vendor-prices') {
-      const prefetchedPrices = await prefetchVendorPrices(pre.itemIds, pre.guild.region, fetch, { requireMetadata: true });
+      const ahContext = await resolveGuildAhContext(getPool(), pre.guild);
+      const [prefetchedPrices, ahSnap] = await Promise.all([
+        prefetchVendorPrices(pre.itemIds, pre.guild.region, fetch, { requireMetadata: true }),
+        fetchForeverAhSnapshot({ ...ahContext, force: true }),
+      ]);
       return transaction(async db => {
         const acct = await getIdentity(request, db);
         need(acct,'Sign in before using this action.',401);
@@ -724,9 +733,10 @@ export async function handleAction(request, address) {
         const state = await loadGuildState(db, guild.id, guild, { includeRequests: false });
         const guildChars = state.characters.filter(c => c.accountId === acct.id && c.active !== false);
         const access = resolveAccess(acct, acct.testAccount ? guildChars : (acctChars.length ? acctChars : guildChars), state, guild.id);
-        need(access.isGuildMaster || access.permissions.manageGuildSync,'Your selected character cannot refresh bank item vendor prices.');
-        const result = await refreshGuildTransactionPrices(db, guild.id, guild.region, fetch, prefetchedPrices);
-        return {ok:true,message:`Priced ${result.itemsPriced} items across ${result.transactionsUpdated} bank entries.`};
+        need(access.isGuildMaster || access.permissions.manageGuildSync,'Your selected character cannot refresh bank item prices.');
+        const result = await refreshGuildTransactionPrices(db, guild.id, guild.region, fetch, prefetchedPrices, ahContext);
+        const ahNote = ahSnap.ok ? ` (${result.ahPriced} AH, ${result.vendorPriced} vendor fallback)` : ' (vendor fallback — AH unavailable)';
+        return {ok:true,message:`Priced ${result.itemsPriced} items${ahNote} across ${result.transactionsUpdated} bank entries.`};
       });
     }
     const profFetchStartedAt = new Date();
@@ -1407,6 +1417,7 @@ export async function handleSync(request, address) {
   // Defer item_catalog writes until AFTER the locked upload passes authorization and claims sync_uploads.
   let prefetchedPrices = new Map();
   let prefetchedCatalogItems = [];
+  let prefetchedAhContext = null;
   if ((value.banks ?? []).length || (value.bankLog ?? []).length) {
     const preDb = getPool();
     let preAccount = null;
@@ -1465,7 +1476,11 @@ export async function handleSync(request, address) {
               const logItemIds = preLog.map(e => e.itemId ?? e.itemID).filter(Boolean);
               const cappedIds = [...new Set([...eligibleBankIds, ...logItemIds])].slice(0, 200);
               if (cappedIds.length) {
-                const prefetched = await prefetchVendorPrices(cappedIds, preGuild.region, fetch, { requireMetadata: eligibleBankIds.length > 0, deferCatalogWrite: true });
+                prefetchedAhContext = await resolveGuildAhContext(preDb, preGuild);
+                const [prefetched] = await Promise.all([
+                  prefetchVendorPrices(cappedIds, preGuild.region, fetch, { requireMetadata: eligibleBankIds.length > 0, deferCatalogWrite: true }),
+                  fetchForeverAhSnapshot({ ...prefetchedAhContext, force: false }),
+                ]);
                 prefetchedPrices = prefetched.priceMap;
                 prefetchedCatalogItems = prefetched.fetchedItems;
               }
@@ -1544,7 +1559,8 @@ export async function handleSync(request, address) {
         : new Map();
       let txImportResult = null;
       if (eligibleBankLog.length) {
-        txImportResult = await importBankTransactions(db, guild.id, eligibleBankLog, guild.region, fetch, prefetchedPrices);
+        const ahCtx = prefetchedAhContext ?? await resolveGuildAhContext(db, guild);
+        txImportResult = await importBankTransactions(db, guild.id, eligibleBankLog, guild.region, fetch, prefetchedPrices, ahCtx);
       }
       await db.query('UPDATE sync_tokens SET last_used_at=$1 WHERE id=$2',[now,claims.jti]);
       await queueSyncNotifications(db, guild, guildState, merged, txImportResult, beforeDonorReps, postCommit, origin);
@@ -1616,7 +1632,8 @@ export async function handleSync(request, address) {
       : new Map();
     let txImportResult = null;
     if (eligibleBankLog.length) {
-      txImportResult = await importBankTransactions(db, guild.id, eligibleBankLog, guild.region, fetch, prefetchedPrices);
+      const ahCtx = prefetchedAhContext ?? await resolveGuildAhContext(db, guild);
+      txImportResult = await importBankTransactions(db, guild.id, eligibleBankLog, guild.region, fetch, prefetchedPrices, ahCtx);
     }
     await queueSyncNotifications(db, guild, guildState, merged, txImportResult, beforeDonorReps, postCommit, origin);
     return {ok:true,message:'Snapshot synced.',...(skippedBankLog ? {skippedBankLog} : {})};
