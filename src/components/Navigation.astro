@@ -11,19 +11,73 @@ const selectedCharacter = verifiedCharacters.find((character: { isMain?: boolean
 const optionLabel = (character: { name: string; level?: number | null; className?: string | null }) =>
   character.level ? `${character.name} (${character.level}${character.className ? ` ${character.className}` : ''})` : character.className ? `${character.name} (${character.className})` : character.name;
 const bankRequestCount = Number(guild?.pendingBankRequestCount ?? 0);
-const links = [
-  { href: '/', label: 'Guild hall', icon: 'home', count: 0 },
-  { href: '/activity', label: 'Activity', icon: 'notice', count: 0 },
-  { href: '/roster', label: 'Roster', icon: 'users', count: 0 },
-  { href: '/bank', label: 'Guild bank', icon: 'chest', count: bankRequestCount },
-  { href: '/professions', label: 'Professions', icon: 'notice', count: 0 },
+const currentPath = Astro.url.pathname;
+const accountLabel = account?.testAccount ? 'Local test account' : account ? 'My account' : 'Sign in';
+const guildItems = [
+  { href: '/', label: 'Guild hall', icon: 'home' as const, count: 0 },
+  { href: '/activity', label: 'Activity', icon: 'notice' as const, count: 0 },
+  { href: '/roster', label: 'Roster', icon: 'users' as const, count: 0 },
+];
+const vaultItems = [
+  { href: '/bank', label: 'Guild bank', icon: 'chest' as const, count: bankRequestCount },
+  { href: '/professions', label: 'Professions', icon: 'notice' as const, count: 0 },
+];
+const accountItems = [
+  { href: account ? '/account' : '/login', label: accountLabel, icon: 'users' as const, count: 0 },
   ...(isGuildMaster ? [{ href: '/guild-master', label: 'Guild Master', icon: 'notice' as const, count: 0 }] : []),
-  { href: account ? '/account' : '/login', label: account?.testAccount ? 'Local test account' : account ? 'My account' : 'Sign in', icon: 'users', count: 0 },
-] as const;
+];
+const guildActive = guildItems.some(i => i.href === currentPath);
+const vaultActive = vaultItems.some(i => i.href === currentPath);
+const accountActive = accountItems.some(i => i.href === currentPath);
+const allLinks = [...guildItems, ...vaultItems, ...accountItems];
 ---
 <header class="site-header"><div class="header-inner">
   <a class="brand" href="/" aria-label={`${guildName} home`}><GuildCrest logoUrl={guild?.logoUrl} logoName={guild?.logoName} /><span>{guildName}</span></a>
-  <nav class="desktop-nav" aria-label="Main navigation">{links.map(link => <a href={link.href} data-nav aria-current={Astro.url.pathname === link.href ? 'page' : undefined}><Icon name={link.icon} /><span>{link.label}</span>{link.count > 0 && <span class="nav-count" aria-label={`${link.count} open bank requests`}>{link.count}</span>}</a>)}</nav>
+  <nav class="desktop-nav" aria-label="Main navigation">
+    <details class="nav-dropdown" data-nav-dropdown>
+      <summary class="nav-dropdown-trigger" data-nav data-active={guildActive ? 'true' : undefined}>
+        <Icon name="home" /><span>Guild</span><span class="nav-caret" aria-hidden="true">▾</span>
+      </summary>
+      <div class="nav-dropdown-panel">
+        {guildItems.map(link => (
+          <a href={link.href} class="nav-dropdown-item" aria-current={currentPath === link.href ? 'page' : undefined}>
+            <Icon name={link.icon} /><span>{link.label}</span>
+          </a>
+        ))}
+      </div>
+    </details>
+    <details class="nav-dropdown" data-nav-dropdown>
+      <summary class="nav-dropdown-trigger" data-nav data-active={vaultActive ? 'true' : undefined}>
+        <Icon name="chest" /><span>Vault &amp; Crafts</span>{bankRequestCount > 0 && <span class="nav-count" aria-label={`${bankRequestCount} open bank requests`}>{bankRequestCount}</span>}<span class="nav-caret" aria-hidden="true">▾</span>
+      </summary>
+      <div class="nav-dropdown-panel">
+        {vaultItems.map(link => (
+          <a href={link.href} class="nav-dropdown-item" aria-current={currentPath === link.href ? 'page' : undefined}>
+            <Icon name={link.icon} /><span>{link.label}</span>{link.count > 0 && <span class="nav-count" aria-label={`${link.count} open bank requests`}>{link.count}</span>}
+          </a>
+        ))}
+      </div>
+    </details>
+    {accountItems.length > 1 ? (
+      <details class="nav-dropdown" data-nav-dropdown>
+        <summary class="nav-dropdown-trigger" data-nav data-active={accountActive ? 'true' : undefined}>
+          <Icon name="users" /><span>Account</span><span class="nav-caret" aria-hidden="true">▾</span>
+        </summary>
+        <div class="nav-dropdown-panel">
+          {accountItems.map(link => (
+            <a href={link.href} class="nav-dropdown-item" aria-current={currentPath === link.href ? 'page' : undefined}>
+              <Icon name={link.icon} /><span>{link.label}</span>
+            </a>
+          ))}
+        </div>
+      </details>
+    ) : (
+      <a href={accountItems[0].href} data-nav aria-current={currentPath === accountItems[0].href ? 'page' : undefined}>
+        <Icon name={accountItems[0].icon} /><span>{accountItems[0].label}</span>
+      </a>
+    )}
+  </nav>
+  <div class="header-controls">
   {account && (
     <details class="notif-menu" data-notif-menu>
       <summary class="notif-bell" aria-label={`Notifications${unreadNotifCount > 0 ? ` (${unreadNotifCount} unread)` : ''}`}>
@@ -58,5 +112,6 @@ const links = [
     </details>
   )}
   {account && verifiedCharacters.length > 0 && <form data-action="set-main" data-auto-submit="true" class="nav-character-selector"><select name="characterId" aria-label="Selected character">{!selectedCharacter && <option value="" disabled selected>Select character</option>}{verifiedCharacters.map((character: { id: string; name: string; level?: number | null; className?: string | null; isMain?: boolean }) => <option value={character.id} selected={character.isMain}>{optionLabel(character)}</option>)}</select><p class="form-message sr-only" role="status" aria-live="polite"></p></form>}
-  <details class="mobile-menu"><summary><Icon name="menu" /><span>Menu</span></summary><nav aria-label="Mobile navigation">{account && verifiedCharacters.length > 0 && <form data-action="set-main" data-auto-submit="true" class="mobile-character-selector"><label>Selected character<select name="characterId">{!selectedCharacter && <option value="" disabled selected>Select character</option>}{verifiedCharacters.map((character: { id: string; name: string; level?: number | null; className?: string | null; isMain?: boolean }) => <option value={character.id} selected={character.isMain}>{optionLabel(character)}</option>)}</select></label><p class="form-message" role="status" aria-live="polite"></p></form>}{links.map(link => <a href={link.href} data-nav aria-current={Astro.url.pathname === link.href ? 'page' : undefined}><Icon name={link.icon} /><span>{link.label}</span>{link.count > 0 && <span class="nav-count" aria-label={`${link.count} open bank requests`}>{link.count}</span>}</a>)}</nav></details>
+  <details class="mobile-menu"><summary><Icon name="menu" /><span>Menu</span></summary><nav aria-label="Mobile navigation">{account && verifiedCharacters.length > 0 && <form data-action="set-main" data-auto-submit="true" class="mobile-character-selector"><label>Selected character<select name="characterId">{!selectedCharacter && <option value="" disabled selected>Select character</option>}{verifiedCharacters.map((character: { id: string; name: string; level?: number | null; className?: string | null; isMain?: boolean }) => <option value={character.id} selected={character.isMain}>{optionLabel(character)}</option>)}</select></label><p class="form-message" role="status" aria-live="polite"></p></form>}{allLinks.map(link => <a href={link.href} data-nav aria-current={currentPath === link.href ? 'page' : undefined}><Icon name={link.icon} /><span>{link.label}</span>{link.count > 0 && <span class="nav-count" aria-label={`${link.count} open bank requests`}>{link.count}</span>}</a>)}</nav></details>
+  </div>
 </div>{account?.testAccount && <div class="mobile-test-status" role="status">Local test account</div>}</header>

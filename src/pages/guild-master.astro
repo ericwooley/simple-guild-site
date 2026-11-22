@@ -89,30 +89,39 @@ const newsPageUrl = (p: number) => `${p > 1 ? `/guild-master?npage=${p}` : '/gui
 
   <GuildPanel id="guild-news" title="Guild news" icon="notice">
     <NewsEditor />
-    <div class="record-list news-list">
-      {pageNews.map(item => {
-        const postUrl = `/news/${encodeURIComponent(item.id)}`;
-        return (
-        <article class="record-row news-entry">
-          <div class="news-entry-main">
-            <h3><a class="news-link" href={postUrl}>{item.title}</a></h3>
-            <a class="news-excerpt-link" href={postUrl}>
-              <p class="news-excerpt">{stripHtmlText(item.html)}</p>
-            </a>
-            <div class="news-entry-footer">
-              <p class="data-age">Published <LocalTime value={item.publishedAt} fallback="Never" /> by {item.authorName}</p>
-              <a class="text-link news-read-more" href={postUrl}>Read full post</a>
+    {pageNews.length > 0 && (
+      <div class="roster-list news-list" data-sortable-table>
+        <div class="roster-table-header roster-table-news-admin">
+          <button type="button" class="sort-header" data-sort-col="0" data-sort-type="text">Title</button>
+          <button type="button" class="sort-header" data-sort-col="1" data-sort-type="text">Author</button>
+          <button type="button" class="sort-header" data-sort-col="2" data-sort-type="num">Published</button>
+          <span>Actions</span>
+        </div>
+        {pageNews.map(item => {
+          const postUrl = `/news/${encodeURIComponent(item.id)}`;
+          const pubMs = item.publishedAt ? (Date.parse(item.publishedAt) || 0) : 0;
+          return (
+            <div class="roster-row news-entry" data-s0={item.title || ''} data-s1={item.authorName || ''} data-s2={String(pubMs)}>
+              <div class="roster-summary roster-summary-table roster-summary-static roster-table-news-admin">
+                <div class="news-entry-main">
+                  <a class="news-link" href={postUrl}><strong>{item.title}</strong></a>
+                  <a class="news-excerpt-link" href={postUrl}>
+                    <p class="news-excerpt">{stripHtmlText(item.html)}</p>
+                  </a>
+                </div>
+                <span class="roster-cell">{item.authorName}</span>
+                <span class="roster-cell roster-cell-muted"><LocalTime value={item.publishedAt} fallback="Never" /></span>
+                <div class="row-actions">
+                  <a class="btn-subtle" href={`${postUrl}?edit=1`}>Edit</a>
+                  <ActionForm action="delete-news" label="Delete" values={{id:item.id}} class="inline-action" buttonClass="btn-subtle btn-subtle-danger" />
+                </div>
+              </div>
             </div>
-          </div>
-          <div class="row-actions">
-            <a class="btn-subtle" href={`${postUrl}?edit=1`}>Edit</a>
-            <ActionForm action="delete-news" label="Delete" values={{id:item.id}} class="inline-action" buttonClass="btn-subtle btn-subtle-danger" />
-          </div>
-        </article>
-        );
-      })}
-      {!news.length && <p class="notice">No guild news published yet.</p>}
-    </div>
+          );
+        })}
+      </div>
+    )}
+    {!news.length && <p class="notice">No guild news published yet.</p>}
     <Pagination page={newsPage} totalPages={newsTotalPages} totalItems={news.length} pageSize={newsPageSize} pageUrl={newsPageUrl} label="Guild news pagination" />
   </GuildPanel>
 

@@ -53,6 +53,24 @@
       if (select) select.disabled = false;
     } finally { form.removeAttribute('aria-busy'); }
   }
+  const navDropdowns = Array.from(document.querySelectorAll<HTMLDetailsElement>('[data-nav-dropdown]'));
+  navDropdowns.forEach((dropdown) => {
+    dropdown.addEventListener('toggle', () => {
+      if (!dropdown.open) return;
+      navDropdowns.forEach((other) => { if (other !== dropdown) other.open = false; });
+      document.querySelectorAll<HTMLDetailsElement>('[data-notif-menu]').forEach((m) => { m.open = false; });
+    });
+  });
+  document.addEventListener('click', (event) => {
+    navDropdowns.forEach((dropdown) => {
+      if (dropdown.open && event.target instanceof Node && !dropdown.contains(event.target)) dropdown.open = false;
+    });
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      navDropdowns.forEach((dropdown) => { dropdown.open = false; });
+    }
+  });
   document.querySelectorAll<HTMLDetailsElement>('[data-notif-menu]').forEach((menu) => {
     const badge = menu.querySelector<HTMLElement>('[data-notif-badge]');
     const markAllBtn = menu.querySelector<HTMLButtonElement>('[data-notif-mark-all]');

@@ -26,7 +26,19 @@ p { text-wrap: pretty; }
 .brand span { font-size: 16px; line-height: 1.25; letter-spacing: .03em; color: #e1c88e; }
 .guild-crest-picture { display: contents; }
 .guild-crest { width: 50px; height: 50px; flex: none; object-fit: contain; filter: drop-shadow(0 2px 6px #0008); }
-.desktop-nav { display: flex; align-items: stretch; align-self: stretch; gap: 4px; flex: 0 1 auto; min-width: 0; }
+.desktop-nav { display: flex; align-items: stretch; align-self: stretch; gap: 6px; flex: 0 1 auto; min-width: 0; }
+.header-controls { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
+.nav-dropdown { position: relative; display: flex; align-items: stretch; }
+.nav-dropdown-trigger { list-style: none; cursor: pointer; user-select: none; }
+.nav-dropdown-trigger::-webkit-details-marker { display: none; }
+.nav-caret { font-size: 11px; opacity: .75; margin-left: 2px; transition: transform 140ms; }
+.nav-dropdown[open] .nav-caret { transform: rotate(180deg); }
+.nav-dropdown[open] .nav-dropdown-trigger, [data-nav][data-active="true"] { color: #ead095; border-bottom-color: #d4af55; background: linear-gradient(0deg, #d4af5515, transparent); }
+.nav-dropdown-panel { position: absolute; left: 0; top: calc(100% + 1px); min-width: 210px; display: flex; flex-direction: column; padding: 6px 0; border: 1px solid #755f39; background: #18140f; box-shadow: 0 12px 32px #000000b8; z-index: 60; }
+.nav-dropdown-item { display: flex; align-items: center; gap: 9px; padding: 10px 16px; white-space: nowrap; font: 500 13.5px/1.35 system-ui, sans-serif; color: #cbc0a8; border-left: 2px solid transparent; transition: color 120ms, background-color 120ms, border-color 120ms; }
+.nav-dropdown-item svg { width: 16px; height: 16px; flex: none; opacity: .85; }
+.nav-dropdown-item:hover { color: #f3dda2; background: #262016; }
+.nav-dropdown-item[aria-current="page"] { color: #f1d99c; border-left-color: #d4af55; background: #d4af5514; }
 .notif-menu { position: relative; flex: none; }
 .notif-bell { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 36px; height: 36px; padding: 0 8px; border: 1px solid #4d3f29; background: #19150f; color: #dfd2b5; cursor: pointer; list-style: none; }
 .notif-bell::-webkit-details-marker { display: none; }
@@ -288,10 +300,16 @@ progress::-webkit-progress-value { background: #caa85e; }
 .roster-row-selected { border-color: #c7a35e; box-shadow: inset 0 0 0 1px #c7a35e40; }
 .roster-row[open] { border-color: #9e8149; }
 .roster-summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 13px 18px; cursor: pointer; list-style: none; }
+.roster-summary-static { cursor: default; }
 .roster-summary-table { display: grid; grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(72px, 0.55fr)) repeat(2, minmax(130px, 1fr)); gap: 12px; align-items: center; }
 .roster-table-header.roster-table-3col, .roster-summary-table.roster-table-3col { grid-template-columns: minmax(220px, 2.2fr) minmax(140px, 1.1fr) minmax(90px, 0.7fr); }
+.roster-table-header.roster-table-4col, .roster-summary-table.roster-table-4col { grid-template-columns: minmax(200px, 2fr) minmax(95px, 0.7fr) minmax(145px, 1fr) minmax(145px, 1fr); }
 .roster-table-header.roster-table-bank, .roster-summary-table.roster-table-bank { grid-template-columns: minmax(210px, 2fr) minmax(160px, 1.4fr) 52px minmax(140px, 1fr) 72px; }
 .roster-table-header.roster-table-5col, .roster-summary-table.roster-table-5col { grid-template-columns: minmax(175px, 1.25fr) minmax(105px, 0.75fr) minmax(145px, 1.05fr) minmax(200px, 1.8fr) minmax(95px, 0.7fr); }
+.roster-table-header.roster-table-requests, .roster-summary-table.roster-table-requests { grid-template-columns: minmax(200px, 2fr) 56px minmax(150px, 1.2fr) minmax(95px, 0.75fr) minmax(145px, 1fr); }
+.roster-table-header.roster-table-requests-owner, .roster-summary-table.roster-table-requests-owner { grid-template-columns: minmax(180px, 1.8fr) 52px minmax(140px, 1.1fr) minmax(90px, 0.7fr) minmax(135px, 0.95fr) minmax(170px, 1.1fr); }
+.roster-table-header.roster-table-news, .roster-summary-table.roster-table-news { grid-template-columns: minmax(200px, 2.2fr) minmax(100px, 0.8fr) minmax(130px, 0.9fr); }
+.roster-table-header.roster-table-news-admin, .roster-summary-table.roster-table-news-admin { grid-template-columns: minmax(220px, 2.2fr) minmax(110px, 0.85fr) minmax(135px, 0.95fr) minmax(130px, 0.8fr); }
 .quality-poor { color: #9d9d9d !important; }
 .quality-common { color: #ebe2cc !important; }
 .quality-uncommon { color: #4bd84b !important; }

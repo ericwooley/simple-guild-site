@@ -2,7 +2,8 @@
 
 ## Lists over cards for long collections
 
-- Use compact, scannable expandable lists (`<details class="roster-row">` inside `.roster-list`) instead of multi-column card grids for any collection that can grow beyond a few items — including the guild roster, professions/crafters, recipes, guild bank inventory, and account characters.
+- All row-based list components (guild roster, professions/crafters, recipes, guild bank inventory, guild bank requests, bank history, sync history, guild news lists, and account characters) must use the standard sortable table structure (`.roster-list[data-sortable-table]` with `.roster-table-header`, clickable `button.sort-header[data-sort-col]`, and `.roster-row` items carrying `data-s0`..`data-sN` sort keys) rather than ad-hoc stacked `.record-list` / `.record-row` blocks.
+- Use compact, scannable expandable rows (`<details class="roster-row">`) when rows have secondary details/forms, or compact single-line table rows (`<div class="roster-row">`) when inline actions must stay immediately accessible.
 - Keep each collapsed `<summary>` row to a single compact, scannable line with primary identity, key badges, and inline summary metrics (for example, `Alchemy (137)`, stock count, or crafter count).
 - Place secondary metadata, progress bars, source breakdowns, recipe lists, and forms inside the expanded row body.
 - Reserve card layouts only for small, fixed-count summary blocks (such as the 3 top-level Guild Hall stat cards or login choices).

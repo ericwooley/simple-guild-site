@@ -56,7 +56,7 @@ async function renderRequestRows(statuses, owner = true) {
 test('request rows expose only valid owner actions for their current status', async () => {
   for (const [status, expected] of Object.entries({pending:['Approve','Decline'], approved:['Decline','Mark fulfilled'], declined:[], fulfilled:[]})) {
     const html = await renderRequestRows([status]);
-    const buttons = [...html.matchAll(/<button\b[^>]*>([^<]+)<\/button>/g)].map(match => match[1]);
+    const buttons = [...html.matchAll(/<button\b[^>]*type="submit"[^>]*>([^<]+)<\/button>/g)].map(match => match[1]);
     assert.deepEqual(buttons.sort(), expected.sort(), `Owner actions for ${status} request`);
   }
 });

@@ -295,6 +295,26 @@ test.describe.serial('Full E2E Guild Flow (Mock Battle.net + Real Postgres + Rea
     expect(reqMail.Text).toContain('To make guild bags');
 
     await gmPage.goto(`${BASE_URL}/bank?tab=requests`);
+    // Verify desktop navigation dropdown sections & sub-items
+    const guildDropdown = gmPage.locator('nav.desktop-nav details[data-nav-dropdown]').filter({ hasText: 'Guild' }).first();
+    await guildDropdown.locator('summary').click();
+    await expect(guildDropdown.getByRole('link', { name: 'Roster' })).toBeVisible();
+    const vaultDropdown = gmPage.locator('nav.desktop-nav details[data-nav-dropdown]').filter({ hasText: 'Vault & Crafts' });
+    await vaultDropdown.locator('summary').click();
+    await expect(vaultDropdown.getByRole('link', { name: 'Professions' })).toBeVisible();
+    await expect(guildDropdown).not.toHaveAttribute('open', '');
+    await gmPage.keyboard.press('Escape');
+    await expect(vaultDropdown).not.toHaveAttribute('open', '');
+
+    // Verify Guild requests renders as a sortable table with working sort headers
+    const requestsTable = gmPage.locator('#requests .roster-list[data-sortable-table]');
+    await expect(requestsTable).toBeVisible();
+    const reqSortBtn = requestsTable.locator('.roster-table-header button.sort-header[data-sort-col="0"]');
+    await reqSortBtn.click();
+    await expect(reqSortBtn).toHaveAttribute('data-sort-dir', 'asc');
+    await reqSortBtn.click();
+    await expect(reqSortBtn).toHaveAttribute('data-sort-dir', 'desc');
+
     await expect(gmPage.locator('#requests').getByText('To make guild bags')).toBeVisible();
     await expect(gmPage.locator('[data-notif-badge]')).toBeVisible();
 
@@ -329,10 +349,15 @@ test.describe.serial('Full E2E Guild Flow (Mock Battle.net + Real Postgres + Rea
 
     await waitForEmail({ to: 'member@e2e.local', subjectIncludes: 'E2E Raid Night' });
 
-    // Home page shows excerpt + clicking opens /news/<id> with full post & link
+    // Home page shows news in a sortable table + clicking opens /news/<id> with full post & link
+    await expect(gmPage.locator('#news .roster-list[data-sortable-table]')).toBeVisible();
     await gmPage.locator('a.news-link', { hasText: 'E2E Raid Night' }).click();
     await expect(gmPage).toHaveURL(/\/news\//);
     await expect(gmPage.locator('.news-article-body a[href="https://example.com/guide"]')).toHaveText('Raid Guide');
+
+    // Sync history on /account renders as a sortable table
+    await gmPage.goto(`${BASE_URL}/account`);
+    await expect(gmPage.locator('#sync-history .roster-list[data-sortable-table]')).toBeVisible();
 
     // External stranger visits /e2e-test-guild/feedback (unauthenticated sees no guild member names)
     const outsiderCtx = await browser.newContext();
