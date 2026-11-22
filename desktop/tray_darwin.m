@@ -4,23 +4,28 @@ extern void goTrayOpen(void);
 extern void goTraySettings(void);
 extern void goTraySyncNow(void);
 extern void goTrayToggleWatch(void);
+extern void goTrayUpdate(void);
 extern void goTrayQuit(void);
 
 @interface HHTrayDelegate : NSObject {
     NSStatusItem *_statusItem;
     NSMenuItem *_watchItem;
+    NSMenuItem *_updateItem;
 }
 @property (nonatomic, retain) NSStatusItem *statusItem;
 @property (nonatomic, retain) NSMenuItem *watchItem;
+@property (nonatomic, retain) NSMenuItem *updateItem;
 @end
 
 @implementation HHTrayDelegate
 @synthesize statusItem = _statusItem;
 @synthesize watchItem = _watchItem;
+@synthesize updateItem = _updateItem;
 - (void)onOpen:(id)sender { goTrayOpen(); }
 - (void)onSettings:(id)sender { goTraySettings(); }
 - (void)onSync:(id)sender { goTraySyncNow(); }
 - (void)onToggleWatch:(id)sender { goTrayToggleWatch(); }
+- (void)onUpdate:(id)sender { goTrayUpdate(); }
 - (void)onQuit:(id)sender { goTrayQuit(); }
 @end
 
@@ -69,6 +74,12 @@ void hhSetupTray(const void *pngBytes, int pngLen) {
 
         [menu addItem:[NSMenuItem separatorItem]];
 
+        NSMenuItem *updateItem = [[NSMenuItem alloc] initWithTitle:@"Check for Updates…" action:@selector(onUpdate:) keyEquivalent:@""];
+        updateItem.target = hhTray;
+        [menu addItem:updateItem];
+        hhTray.updateItem = updateItem;
+        [updateItem release];
+
         NSMenuItem *quitItem = [[NSMenuItem alloc] initWithTitle:@"Quit Helping Hand" action:@selector(onQuit:) keyEquivalent:@"q"];
         quitItem.target = hhTray;
         [menu addItem:quitItem];
@@ -85,6 +96,21 @@ void hhUpdateWatchLabel(int watching) {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (hhTray != nil && hhTray.watchItem != nil) {
             hhTray.watchItem.title = watching ? @"Stop Auto-Sync" : @"Start Auto-Sync";
+        }
+    });
+}
+
+void hhUpdateReleaseLabel(int available, const char *version) {
+    NSString *verStr = version ? [NSString stringWithUTF8String:version] : @"";
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (hhTray != nil && hhTray.updateItem != nil) {
+            if (available && [verStr length] > 0) {
+                hhTray.updateItem.title = [NSString stringWithFormat:@"Install Update (v%@)", verStr];
+            } else if (available) {
+                hhTray.updateItem.title = @"Install Update";
+            } else {
+                hhTray.updateItem.title = @"Check for Updates…";
+            }
         }
     });
 }

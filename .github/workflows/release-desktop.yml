@@ -1,0 +1,61 @@
+name: Release Desktop App (macOS DMG)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-desktop-main
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    runs-on: macos-15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: desktop/go.sum
+
+      - name: Run desktop unit tests
+        working-directory: desktop
+        run: go test -v ./...
+
+      - name: Build universal macOS DMG
+        env:
+          APP_VERSION: 0.1.${{ github.run_number }}
+          GIT_COMMIT: ${{ github.sha }}
+          UPDATE_REPO: ${{ github.repository }}
+          UNIVERSAL: "1"
+        run: bash scripts/package-desktop-dmg.sh
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: desktop-v0.1.${{ github.run_number }}
+          APP_VERSION: 0.1.${{ github.run_number }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" \
+              desktop/build/release/HelpingHand-macOS-universal.dmg \
+              desktop/build/release/SHA256SUMS.txt \
+              --clobber
+          else
+            gh release create "$TAG" \
+              desktop/build/release/HelpingHand-macOS-universal.dmg \
+              desktop/build/release/SHA256SUMS.txt \
+              --latest \
+              --title "Helping Hand Desktop v${APP_VERSION}" \
+              --notes "Automated macOS universal DMG build for commit \`${GITHUB_SHA::7}\` on \`main\`."
+          fi

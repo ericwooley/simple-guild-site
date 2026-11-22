@@ -627,38 +627,142 @@
     GetBridgeStatus: () => Promise<BridgeStatus>;
     PickSavedVariablesFile: () => Promise<BridgeStatus>;
     UpdateSettings: (autoSyncOnStart: boolean, pollIntervalSeconds: number, savedVariablesPath: string) => Promise<BridgeStatus>;
+    SetLaunchAtLogin?: (enabled: boolean) => Promise<BridgeStatus>;
+    CheckForUpdates?: () => Promise<BridgeStatus>;
+    InstallUpdate?: () => Promise<BridgeStatus>;
     SyncNow: () => Promise<BridgeStatus>;
     StartWatching: () => Promise<BridgeStatus>;
     StopWatching: () => Promise<BridgeStatus>;
-    StartBattleNetLogin: () => Promise<boolean>;
+    StartBattleNetLogin: (termsAgreed?: boolean) => Promise<boolean>;
   };
   type BridgeStatus = {
     available: boolean;
+    appVersion?: string;
     savedVariablesPath: string;
     autoSyncOnStart: boolean;
+    launchAtLogin?: boolean;
     pollIntervalSeconds: number;
     watching: boolean;
     openSettings?: boolean;
     lastSyncedAt: string;
     lastSummary: string;
     lastError: string;
+    pairingCode?: string;
+    updateAvailable?: boolean;
+    latestVersion?: string;
+    releaseUrl?: string;
+    updateChecking?: boolean;
+    updateInstalling?: boolean;
+    updateError?: string;
   };
   const wailsApp = (window as unknown as { go?: { main?: { App?: WailsBridge } } }).go?.main?.App;
   if (wailsApp) {
     const settingsDialog = document.querySelector<HTMLDialogElement>('#desktop-settings-dialog');
     const settingsForm = document.querySelector<HTMLFormElement>('#desktop-settings-form');
     const autoSyncInput = document.querySelector<HTMLInputElement>('#setting-autosync');
+    const launchAtLoginInput = document.querySelector<HTMLInputElement>('#setting-launch-at-login');
     const intervalInput = document.querySelector<HTMLInputElement>('#setting-interval');
     const filePathInput = document.querySelector<HTMLInputElement>('#setting-filepath');
     const settingsStatus = document.querySelector<HTMLElement>('#desktop-settings-status');
+    const appVersionEl = document.querySelector<HTMLElement>('#setting-app-version');
+    const updateStatusEl = document.querySelector<HTMLElement>('#setting-update-status');
+    const checkUpdateBtn = document.querySelector<HTMLButtonElement>('#setting-check-update');
+    const installUpdateBtn = document.querySelector<HTMLButtonElement>('#setting-install-update');
+    let dismissedUpdateVersion = '';
+
+    const runOneClickUpdate = async () => {
+      if (typeof wailsApp.InstallUpdate !== 'function') return;
+      if (installUpdateBtn) {
+        installUpdateBtn.disabled = true;
+        installUpdateBtn.textContent = 'Updating…';
+      }
+      const bannerBtn = document.querySelector<HTMLButtonElement>('#desktop-update-install-btn');
+      if (bannerBtn) {
+        bannerBtn.disabled = true;
+        bannerBtn.textContent = 'Updating…';
+      }
+      if (updateStatusEl) updateStatusEl.textContent = 'Downloading and installing update…';
+      try {
+        await wailsApp.InstallUpdate();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Update failed.';
+        if (updateStatusEl) updateStatusEl.textContent = msg;
+        if (installUpdateBtn) {
+          installUpdateBtn.disabled = false;
+          installUpdateBtn.textContent = 'Update now';
+        }
+        if (bannerBtn) {
+          bannerBtn.disabled = false;
+          bannerBtn.textContent = 'Update now';
+        }
+      }
+    };
+
+    const renderUpdateUI = (status: BridgeStatus) => {
+      if (appVersionEl && status.appVersion) appVersionEl.textContent = `v${status.appVersion.replace(/^v/, '')}`;
+      if (updateStatusEl) {
+        if (status.updateInstalling) updateStatusEl.textContent = 'Installing update…';
+        else if (status.updateChecking) updateStatusEl.textContent = 'Checking for updates…';
+        else if (status.updateError) updateStatusEl.textContent = status.updateError;
+        else if (status.updateAvailable && status.latestVersion) updateStatusEl.textContent = `Update available: v${status.latestVersion}`;
+        else if (status.latestVersion) updateStatusEl.textContent = 'Up to date';
+        else updateStatusEl.textContent = '';
+      }
+      if (checkUpdateBtn) checkUpdateBtn.disabled = Boolean(status.updateChecking || status.updateInstalling);
+      if (installUpdateBtn) {
+        installUpdateBtn.hidden = !status.updateAvailable;
+        installUpdateBtn.disabled = Boolean(status.updateInstalling);
+        installUpdateBtn.textContent = status.updateInstalling ? 'Updating…' : `Update to v${status.latestVersion || 'latest'}`;
+      }
+      let banner = document.querySelector<HTMLElement>('#desktop-update-banner');
+      if (!status.updateAvailable || (status.latestVersion && status.latestVersion === dismissedUpdateVersion)) {
+        banner?.remove();
+        return;
+      }
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'desktop-update-banner';
+        banner.setAttribute('role', 'status');
+        banner.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9998;display:flex;align-items:center;gap:12px;padding:12px 16px;background:linear-gradient(135deg,#272219,#15130f);border:1px solid #c7a35e;color:#eedcaa;box-shadow:0 8px 28px rgba(0,0,0,0.65);font-family:system-ui,sans-serif;';
+        const label = document.createElement('span');
+        label.id = 'desktop-update-banner-text';
+        const btn = document.createElement('button');
+        btn.id = 'desktop-update-install-btn';
+        btn.type = 'button';
+        btn.className = 'arcane-btn';
+        btn.style.cssText = 'padding:6px 12px;font-size:13px;';
+        btn.addEventListener('click', () => { void runOneClickUpdate(); });
+        const dismiss = document.createElement('button');
+        dismiss.type = 'button';
+        dismiss.setAttribute('aria-label', 'Dismiss update notice');
+        dismiss.textContent = '×';
+        dismiss.style.cssText = 'background:transparent;border:0;color:#b8a57a;font-size:18px;cursor:pointer;padding:0 4px;line-height:1;';
+        dismiss.addEventListener('click', () => {
+          dismissedUpdateVersion = status.latestVersion || 'dismissed';
+          banner?.remove();
+        });
+        banner.append(label, btn, dismiss);
+        document.body.appendChild(banner);
+      }
+      const labelEl = banner.querySelector<HTMLElement>('#desktop-update-banner-text');
+      const btnEl = banner.querySelector<HTMLButtonElement>('#desktop-update-install-btn');
+      if (labelEl) labelEl.textContent = status.updateInstalling ? 'Installing update…' : `Update available: v${status.latestVersion || 'new'}`;
+      if (btnEl) {
+        btnEl.disabled = Boolean(status.updateInstalling);
+        btnEl.textContent = status.updateInstalling ? 'Updating…' : 'Update now';
+      }
+    };
+
     const openDesktopSettings = async (prefetched?: BridgeStatus) => {
       if (!settingsDialog) return;
       try {
         const status = prefetched ?? await wailsApp.GetBridgeStatus();
         if (autoSyncInput) autoSyncInput.checked = Boolean(status.autoSyncOnStart);
+        if (launchAtLoginInput) launchAtLoginInput.checked = Boolean(status.launchAtLogin);
         if (intervalInput) intervalInput.value = String(status.pollIntervalSeconds || 5);
         if (filePathInput) filePathInput.value = status.savedVariablesPath || '';
         if (settingsStatus) settingsStatus.textContent = '';
+        renderUpdateUI(status);
       } catch {}
       if (!settingsDialog.open) settingsDialog.showModal();
     };
@@ -672,6 +776,7 @@
     const pollBridge = async () => {
       try {
         const status = await wailsApp.GetBridgeStatus();
+        renderUpdateUI(status);
         onBridgeStatus?.(status);
         if (status.openSettings) void openDesktopSettings(status);
       } catch {}
@@ -684,6 +789,19 @@
         if (filePathInput) filePathInput.value = status.savedVariablesPath || '';
       } catch {}
     });
+    checkUpdateBtn?.addEventListener('click', async () => {
+      if (typeof wailsApp.CheckForUpdates !== 'function') return;
+      if (updateStatusEl) updateStatusEl.textContent = 'Checking for updates…';
+      if (checkUpdateBtn) checkUpdateBtn.disabled = true;
+      try {
+        const status = await wailsApp.CheckForUpdates();
+        renderUpdateUI(status);
+      } catch (err) {
+        if (updateStatusEl) updateStatusEl.textContent = err instanceof Error ? err.message : 'Unable to check for updates.';
+        if (checkUpdateBtn) checkUpdateBtn.disabled = false;
+      }
+    });
+    installUpdateBtn?.addEventListener('click', () => { void runOneClickUpdate(); });
     settingsForm?.addEventListener('submit', async (event) => {
       event.preventDefault();
       try {
@@ -692,6 +810,9 @@
           Number(intervalInput?.value || 5),
           filePathInput?.value || ''
         );
+        if (launchAtLoginInput && typeof wailsApp.SetLaunchAtLogin === 'function') {
+          await wailsApp.SetLaunchAtLogin(Boolean(launchAtLoginInput.checked));
+        }
         if (settingsStatus) settingsStatus.textContent = 'Settings saved.';
         setTimeout(() => settingsDialog?.close(), 350);
       } catch (err) {
@@ -718,7 +839,10 @@
     };
     const wailsEvents = (window as any).runtime?.EventsOn;
     if (typeof wailsEvents === 'function') {
-      wailsEvents('bridge:status', (st: any) => showPairingBanner(st?.pairingCode || ''));
+      wailsEvents('bridge:status', (st: any) => {
+        showPairingBanner(st?.pairingCode || '');
+        if (st) renderUpdateUI(st);
+      });
     }
     const startDesktopSignIn = async (triggerEl: HTMLElement, termsAgreed = false) => {
       const originalText = triggerEl.textContent || 'Continue with Battle.net';

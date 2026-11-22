@@ -35,6 +35,7 @@ type BridgeStatus struct {
 	SiteURL             string `json:"siteUrl"`
 	SavedVariablesPath  string `json:"savedVariablesPath"`
 	AutoSyncOnStart     bool   `json:"autoSyncOnStart"`
+	LaunchAtLogin       bool   `json:"launchAtLogin"`
 	PollIntervalSeconds int    `json:"pollIntervalSeconds"`
 	Watching            bool   `json:"watching"`
 	OpenSettings        bool   `json:"openSettings"`
@@ -42,6 +43,13 @@ type BridgeStatus struct {
 	LastSummary         string `json:"lastSummary"`
 	LastError           string `json:"lastError"`
 	PairingCode         string `json:"pairingCode,omitempty"`
+	UpdateAvailable     bool   `json:"updateAvailable"`
+	LatestVersion       string `json:"latestVersion,omitempty"`
+	ReleaseURL          string `json:"releaseUrl,omitempty"`
+	UpdateChecking      bool   `json:"updateChecking"`
+	UpdateInstalling    bool   `json:"updateInstalling"`
+	UpdateError         string `json:"updateError,omitempty"`
+	UpdateCheckedAt     string `json:"updateCheckedAt,omitempty"`
 }
 
 type App struct {
@@ -52,22 +60,26 @@ type App struct {
 	pairingCode         string
 	filePath            string
 	autoSyncOnStart     bool
+	launchAtLogin       bool
 	pollIntervalSeconds int
 	domReady            bool
 	watching            bool
 	openSettings        bool
 	quitting            bool
 	stopWatch           chan struct{}
+	stopUpdate          chan struct{}
 	lastDigest          string
 	lastSyncAt          string
 	lastMsg             string
 	lastErr             string
+	update              UpdateState
 }
 
 func NewApp(siteURL string) *App {
 	app := &App{
 		siteURL:             siteURL,
 		autoSyncOnStart:     true,
+		launchAtLogin:       isLaunchAtLoginEnabled(),
 		pollIntervalSeconds: 5,
 	}
 	app.loadConfig()
@@ -99,6 +111,7 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.mu.Unlock()
 	setupTray(a)
+	a.startAutoUpdateLoop()
 }
 
 func (a *App) onDomReady(_ context.Context) {
@@ -124,6 +137,7 @@ func (a *App) beforeClose(ctx context.Context) bool {
 }
 
 func (a *App) shutdown(_ context.Context) {
+	a.stopAutoUpdateLoop()
 	a.StopWatching()
 }
 
@@ -263,10 +277,11 @@ func (a *App) statusLocked() BridgeStatus {
 	return BridgeStatus{
 		Available:           true,
 		Authorized:          a.sessionVal != "",
-		AppVersion:          "0.1.0",
+		AppVersion:          AppVersion,
 		SiteURL:             a.siteURL,
 		SavedVariablesPath:  a.filePath,
 		AutoSyncOnStart:     a.autoSyncOnStart,
+		LaunchAtLogin:       a.launchAtLogin,
 		PollIntervalSeconds: a.pollIntervalSeconds,
 		Watching:            a.watching,
 		OpenSettings:        a.openSettings,
@@ -274,7 +289,29 @@ func (a *App) statusLocked() BridgeStatus {
 		LastSummary:         a.lastMsg,
 		LastError:           a.lastErr,
 		PairingCode:         a.pairingCode,
+		UpdateAvailable:     a.update.Available,
+		LatestVersion:       a.update.LatestVer,
+		ReleaseURL:          a.update.ReleaseURL,
+		UpdateChecking:      a.update.Checking,
+		UpdateInstalling:    a.update.Installing,
+		UpdateError:         a.update.LastError,
+		UpdateCheckedAt:     a.update.LastChecked,
 	}
+}
+
+func (a *App) SetLaunchAtLogin(enabled bool) (BridgeStatus, error) {
+	a.mu.Lock()
+	siteURL := a.siteURL
+	a.mu.Unlock()
+	if err := setLaunchAtLogin(enabled, siteURL); err != nil {
+		return a.GetBridgeStatus(), err
+	}
+	a.mu.Lock()
+	a.launchAtLogin = isLaunchAtLoginEnabled()
+	status := a.statusLocked()
+	a.mu.Unlock()
+	a.emitStatus(status)
+	return status, nil
 }
 
 func (a *App) UpdateSettings(autoSyncOnStart bool, pollIntervalSeconds int, savedVariablesPath string) BridgeStatus {
@@ -310,6 +347,7 @@ func (a *App) UpdateSettings(autoSyncOnStart bool, pollIntervalSeconds int, save
 
 func (a *App) emitStatus(status BridgeStatus) {
 	updateTrayWatchState(status.Watching)
+	updateTrayUpdateState(status.UpdateAvailable, status.LatestVersion)
 	a.mu.Lock()
 	ctx := a.ctx
 	a.mu.Unlock()

@@ -25,6 +25,7 @@
     "test:db": "RUN_DB_TESTS=1 node --env-file-if-exists=.env --test tests/server-integration.test.mjs",
     "desktop:dev": "cd desktop && CGO_LDFLAGS=\"-framework UniformTypeIdentifiers\" go run -tags desktop,dev .",
     "desktop:build": "cd desktop && mkdir -p build/bin && CGO_LDFLAGS=\"-framework UniformTypeIdentifiers\" go build -tags desktop,production -o build/bin/HelpingHand .",
+    "desktop:dmg": "bash scripts/package-desktop-dmg.sh",
     "test:desktop": "cd desktop && go test ./..."
   },
   "dependencies": {

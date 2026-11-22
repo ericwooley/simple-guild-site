@@ -4,8 +4,10 @@ package main
 
 /*
 #cgo LDFLAGS: -framework Cocoa
+#include <stdlib.h>
 extern void hhSetupTray(const void *pngBytes, int pngLen);
 extern void hhUpdateWatchLabel(int watching);
+extern void hhUpdateReleaseLabel(int available, const char *version);
 */
 import "C"
 
@@ -35,6 +37,31 @@ func updateTrayWatchState(watching bool) {
 	} else {
 		C.hhUpdateWatchLabel(0)
 	}
+}
+
+func updateTrayUpdateState(available bool, version string) {
+	cVer := C.CString(version)
+	defer C.free(unsafe.Pointer(cVer))
+	if available {
+		C.hhUpdateReleaseLabel(1, cVer)
+	} else {
+		C.hhUpdateReleaseLabel(0, cVer)
+	}
+}
+
+//export goTrayUpdate
+func goTrayUpdate() {
+	if trayApp == nil {
+		return
+	}
+	go func() {
+		status := trayApp.GetBridgeStatus()
+		if status.UpdateAvailable {
+			_, _ = trayApp.InstallUpdate()
+			return
+		}
+		_, _ = trayApp.CheckForUpdates()
+	}()
 }
 
 //export goTrayOpen
