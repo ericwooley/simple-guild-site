@@ -5,37 +5,20 @@
 - Node.js 22.23.4 or newer
 - pnpm 11.20.0
 - Docker with Compose
-- proc-man
 - Python 3
 
 ## Local setup
 
 1. Execute `pnpm install`.
 2. Execute `pnpm setup:local` to create private local settings.
-3. Execute `proc-man daemon install --now`.
-4. List services with `proc-man process list --directory "$PWD"`.
-5. If no database service exists, register it:
+3. Start PostgreSQL with `docker compose up -d postgres` (or `pnpm db:dev`).
+4. Execute `pnpm db:migrate`.
+5. Execute `pnpm db:seed` to create the local test records.
+6. Execute `pnpm addon:package` to prepare the downloads.
+7. Start the site with `pnpm dev`.
+8. Open `http://localhost:4321/login`.
 
-   ```sh
-   proc-man process register --label helping-hand-db --kind service --cwd "$PWD" --tag project:helping-hand --tag component:postgres --tag purpose:development --port tcp=tcp://127.0.0.1:5438 -- docker compose up --abort-on-container-exit postgres
-   ```
-
-6. Start the database with `proc-man process start PROCESS_ID`.
-7. Execute `pnpm db:migrate`.
-8. Execute `pnpm db:seed` to create the local test records.
-9. Execute `pnpm addon:package` to prepare the downloads.
-10. If no website service exists, register it:
-
-   ```sh
-   proc-man process register --label helping-hand-web --kind service --cwd "$PWD" --tag project:helping-hand --tag component:astro --tag purpose:human-testing --port http=http://localhost:4321/ -- "$(command -v node)" --env-file-if-exists=.env node_modules/astro/bin/astro.mjs dev --host 127.0.0.1 --port 4321
-   ```
-
-11. Start the site with `proc-man process start PROCESS_ID`.
-12. Open `http://localhost:4321/login`.
-
-Use the IDs that proc-man returns. Stop services with `proc-man process stop PROCESS_ID`.
-The database volume retains local data after the service stops.
-The site service uses the absolute Node.js path because the daemon has a separate command search path.
+The database volume retains local data after the container stops.
 
 ## Scope
 

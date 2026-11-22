@@ -12,7 +12,7 @@ The browser receives no database credentials or Battle.net access tokens.
 4. Set `SYNC_JWT_SECRET` to a random secret with at least 32 bytes.
 5. Execute `node --env-file=.env scripts/db-migrate.mjs`.
 6. Execute `node --env-file=.env scripts/db-seed.mjs`.
-7. Start the website through its registered proc-man service.
+7. Start the website with `pnpm dev`.
 8. Open `http://localhost:4321/login`.
 9. Select the local owner or member fixture account.
 

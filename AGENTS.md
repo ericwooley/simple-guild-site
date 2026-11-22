@@ -14,4 +14,3 @@
 - Store timestamps in UTC in PostgreSQL, but always display dates and times in the user's local browser timezone (using `<LocalTime />` / browser-local `toLocaleString()`). Never hardcode `timeZone: 'UTC'` in user-facing UI.
 - Filter forms (`form.filter-bar`, `form[data-auto-filter]`) must auto-apply immediately when options change (no manual Filter/Search button click required).
 - Send all emails via SMTP as `multipart/alternative` with an HTML version styled to match the site's Fantasy RTS Arcane theme and a plain-text fallback.
-- Use proc-man for long-running services. Declare the directory, tags, and ports.

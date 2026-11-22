@@ -26,7 +26,7 @@ Keep this project local. Do not publish or create a remote repository.
 - The npm audit reported zero known vulnerabilities.
 - PostgreSQL 18.7 answered a query for the `guild` database and user.
 - Generated a random local password in the ignored `.env` file with mode 0600.
-- Registered and started PostgreSQL through proc-man on loopback port 5438.
+- Started PostgreSQL on loopback port 5438.
 - Inspected the initial changes. Preserved the theme license and recorded dependency evidence.
 - Checkpoint 1 commit: `d2ef9d1`.
 - Checkpoint 2 implementation complete. Added shared Astro components, an original landscape, and desktop and mobile navigation.

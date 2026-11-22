@@ -46,7 +46,7 @@
 - Added the official Node adapter, PostgreSQL client, and established Playwright test tools after dependency research.
 - The package audit reported zero published vulnerabilities across 322 resolved dependencies.
 - PostgreSQL migration and local fixture setup passed.
-- Development now loads the ignored environment file and listens only on loopback through proc-man.
+- Development now loads the ignored environment file and listens only on loopback.
 - Browser tests passed for requests, fulfillment, member scope, token sync, revocation, and narrow navigation.
 - The actual Python bridge uploaded a temporary SavedVariables fixture through HTTP into PostgreSQL.
 - That integration also passed duplicate submission and revoked-token rejection checks without printing credentials.
