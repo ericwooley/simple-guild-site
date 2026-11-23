@@ -95,11 +95,19 @@ const rawLPage = Number(Astro.url.searchParams.get('lpage') || '1');
 const ledgerPage = Number.isSafeInteger(rawLPage) && rawLPage >= 1 ? Math.min(rawLPage, ledgerTotalPages) : 1;
 const pageLedgerRows = ledgerRows.slice((ledgerPage - 1) * pageSize, ledgerPage * pageSize);
 
+const rawReqStatus = Astro.url.searchParams.get('rstatus') || 'open';
+const requestStatusFilter = ['open', 'pending', 'approved', 'fulfilled', 'declined', 'all'].includes(rawReqStatus) ? rawReqStatus : 'open';
+const filteredRequests = requests.filter(r => {
+  if (requestStatusFilter === 'open') return r.status === 'pending' || r.status === 'approved';
+  if (requestStatusFilter === 'all') return true;
+  return r.status === requestStatusFilter;
+});
+
 const requestPageSize = 20;
-const requestTotalPages = Math.max(1, Math.ceil(requests.length / requestPageSize));
+const requestTotalPages = Math.max(1, Math.ceil(filteredRequests.length / requestPageSize));
 const rawRPage = Number(Astro.url.searchParams.get('rpage') || '1');
 const requestPage = Number.isSafeInteger(rawRPage) && rawRPage >= 1 ? Math.min(rawRPage, requestTotalPages) : 1;
-const pageRequests = requests.slice((requestPage - 1) * requestPageSize, requestPage * requestPageSize);
+const pageRequests = filteredRequests.slice((requestPage - 1) * requestPageSize, requestPage * requestPageSize);
 
 const openRequestCount = requests.filter(r => r.status === 'pending' || r.status === 'approved').length;
 
@@ -121,11 +129,13 @@ const bankUrl = (overrides: Record<string, string | number | null>, hash = '') =
     page: itemPage > 1 ? String(itemPage) : '',
     hpage: historyPage > 1 ? String(historyPage) : '',
     lpage: ledgerPage > 1 ? String(ledgerPage) : '',
-    rpage: requestPage > 1 ? String(requestPage) : ''
+    rpage: requestPage > 1 ? String(requestPage) : '',
+    rstatus: requestStatusFilter === 'open' ? '' : requestStatusFilter
   };
   for (const [k, v] of Object.entries(overrides)) next[k] = v === null || v === undefined ? '' : String(v);
   if (next.tab === 'stock') next.tab = '';
   if (next.history === 'attributed') next.history = '';
+  if (next.rstatus === 'open') next.rstatus = '';
   if (next.page === '1') next.page = '';
   if (next.hpage === '1') next.hpage = '';
   if (next.lpage === '1') next.lpage = '';
@@ -156,7 +166,7 @@ const qualityClass = (name: string | null | undefined) => name ? `quality-${name
     <div class="explorer-bar">
       <div class="explorer-tabs" role="tablist" aria-label="Guild bank view">
         <a class={`explorer-tab${tab === 'stock' ? ' explorer-tab-active' : ''}`} href={bankUrl({ tab: 'stock' })} aria-current={tab === 'stock' ? 'page' : undefined}>Bank stock ({bank.length})</a>
-        <a class={`explorer-tab${tab === 'requests' ? ' explorer-tab-active' : ''}`} href={bankUrl({ tab: 'requests' })} aria-current={tab === 'requests' ? 'page' : undefined}>Requests ({openRequestCount > 0 ? `${openRequestCount} open` : requests.length})</a>
+        <a class={`explorer-tab${tab === 'requests' ? ' explorer-tab-active' : ''}`} href={bankUrl({ tab: 'requests' })} aria-current={tab === 'requests' ? 'page' : undefined}>Requests ({openRequestCount})</a>
         <a class={`explorer-tab${tab === 'history' ? ' explorer-tab-active' : ''}`} href={bankUrl({ tab: 'history' })} aria-current={tab === 'history' ? 'page' : undefined}>Donation history ({visibleTransactions.filter(tx => Boolean(tx.actorName)).length})</a>
         {canViewLedger && (
           <a class={`explorer-tab${tab === 'ledger' ? ' explorer-tab-active' : ''}`} href={bankUrl({ tab: 'ledger', player: null })} aria-current={tab === 'ledger' ? 'page' : undefined}>Contribution ledger</a>
@@ -335,8 +345,22 @@ const qualityClass = (name: string | null | undefined) => name ? `quality-${name
       {!items.length && <p class="notice">{bank.length ? 'No items match these filters.' : 'Sync your bank character from the Helping Hand addon to populate guild bank stock.'}</p>}
     </> : tab === 'requests' ? (
       <GuildPanel id="requests" title={permissions.approveBankRequests ? 'Guild requests' : 'Your requests'} icon="chest">
+        <form method="get" action="/bank" class="filter-bar">
+          <input type="hidden" name="tab" value="requests" />
+          <label>Status
+            <select name="rstatus">
+              <option value="open" selected={requestStatusFilter === 'open'}>Open (pending &amp; approved)</option>
+              <option value="pending" selected={requestStatusFilter === 'pending'}>Pending</option>
+              <option value="approved" selected={requestStatusFilter === 'approved'}>Approved</option>
+              <option value="fulfilled" selected={requestStatusFilter === 'fulfilled'}>Fulfilled</option>
+              <option value="declined" selected={requestStatusFilter === 'declined'}>Declined</option>
+              <option value="all" selected={requestStatusFilter === 'all'}>All requests</option>
+            </select>
+          </label>
+          {requestStatusFilter !== 'open' && <a class="text-link" href="/bank?tab=requests">Reset</a>}
+        </form>
         <Requests requests={pageRequests} bank={bank} owner={permissions.approveBankRequests} />
-        <Pagination page={requestPage} totalPages={requestTotalPages} totalItems={requests.length} pageSize={requestPageSize} pageUrl={(p: number) => bankUrl({ tab: 'requests', rpage: p })} label="Bank requests pagination" />
+        <Pagination page={requestPage} totalPages={requestTotalPages} totalItems={filteredRequests.length} pageSize={requestPageSize} pageUrl={(p: number) => bankUrl({ tab: 'requests', rpage: p })} label="Bank requests pagination" />
       </GuildPanel>
     ) : tab === 'ledger' && canViewLedger ? (
       <GuildPanel id="bank-ledger" title="Contribution ledger" icon="chest">

@@ -333,6 +333,15 @@ test.describe.serial('Full E2E Guild Flow (Mock Battle.net + Real Postgres + Rea
       gmPage.locator('button[type="submit"]:has-text("Mark fulfilled")').first().click(),
     ]);
     await waitForEmail({ to: 'member@e2e.local', subjectIncludes: 'fulfilled' });
+    // Fulfilled requests are hidden by default and not counted in the Requests tab badge
+    await expect(gmPage.locator('.explorer-tab', { hasText: 'Requests (0)' })).toBeVisible();
+    await expect(gmPage.locator('#requests').getByText('To make guild bags')).toHaveCount(0);
+    // Filtering by Fulfilled reveals it
+    await Promise.all([
+      gmPage.waitForNavigation({ waitUntil: 'networkidle' }),
+      gmPage.locator('#requests select[name="rstatus"]').selectOption('fulfilled'),
+    ]);
+    await expect(gmPage.locator('#requests').getByText('To make guild bags')).toBeVisible();
 
     // GM publishes Guild News with WYSIWYG + inline link bar -> Member receives Guild news email
     await gmPage.goto(`${BASE_URL}/`);
