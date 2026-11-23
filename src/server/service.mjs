@@ -1696,7 +1696,26 @@ export async function handleGuildLogoUpload(request) {
 export function jsonResponse(value,status=200,extra={}) {
   return new Response(JSON.stringify(value),{status,headers:{'content-type':'application/json','cache-control':'no-store',...extra}});
 }
-export function errorResponse(error) {
-  if (error instanceof InputError) return jsonResponse({ok:false,message:error.message},error.status);
-  return jsonResponse({ok:false,message:'The server could not complete this request. Check the server setup.'},503);
+export function errorResponse(error, request = null) {
+  const requestId = randomUUID().slice(0, 8);
+  if (error instanceof InputError) {
+    return jsonResponse({
+      ok: false,
+      message: error.message,
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.field ? { field: error.field } : {}),
+      ...(error.details ? { details: error.details } : {}),
+      status: error.status,
+      requestId,
+    }, error.status);
+  }
+  const route = request ? `${request.method} ${new URL(request.url).pathname}` : 'request';
+  console.error(`[${requestId}] Unhandled error in ${route}:`, error instanceof Error ? (error.stack || error.message) : error);
+  return jsonResponse({
+    ok: false,
+    code: 'SERVER_ERROR',
+    message: `The server could not complete this request (ref: ${requestId}). Check server logs for details.`,
+    status: 500,
+    requestId,
+  }, 500);
 }

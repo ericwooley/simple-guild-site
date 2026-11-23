@@ -1,10 +1,24 @@
-export class InputError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
+export class InputError extends Error {
+  constructor(message, status = 400, meta = null) {
+    super(message);
+    this.status = status;
+    if (meta && typeof meta === 'object') {
+      if (meta.code) this.code = meta.code;
+      if (meta.field) this.field = meta.field;
+      if (meta.details) this.details = meta.details;
+    }
+  }
+}
 export const normalize = value => String(value).trim().toLocaleLowerCase('en-US');
 export const characterKey = (character) => `${normalize(character.realm)}:${normalize(character.name)}`;
 export const itemKey = item => `${item.itemId}:${item.suffixId ?? 0}:${item.enchantId ?? 0}`;
-function assert(condition, message) { if (!condition) throw new InputError(message); }
-function object(value) { assert(value && typeof value === 'object' && !Array.isArray(value), 'Expected an object.'); }
-function fields(value, allowed) { object(value); assert(Object.keys(value).every(k => allowed.includes(k)), 'The snapshot contains an unsupported field.'); }
+function assert(condition, message, meta = null) { if (!condition) throw new InputError(message, 400, meta); }
+function object(value) { assert(value && typeof value === 'object' && !Array.isArray(value), 'Expected a JSON object.', { code: 'INVALID_TYPE' }); }
+function fields(value, allowed) {
+  object(value);
+  const bad = Object.keys(value).filter(k => !allowed.includes(k));
+  assert(bad.length === 0, `The snapshot contains unsupported field(s): ${bad.slice(0, 5).join(', ')}.`, { code: 'UNSUPPORTED_FIELD', details: bad.slice(0, 5) });
+}
 function text(value, label, max = 120) { assert(typeof value === 'string' && value.trim().length > 0 && value.length <= max && !/[\x00-\x1f]/.test(value), `Invalid ${label}.`); }
 function integer(value, label, min = 0, max = 2147483647) { assert(Number.isSafeInteger(value) && value >= min && value <= max, `Invalid ${label}.`); }
 function array(value, max, label) { assert(Array.isArray(value) && value.length <= max, `Invalid ${label}.`); }
@@ -123,17 +137,18 @@ export function authorizeSnapshot(snapshot, account, guild, state, scope) {
     normalize(snapshot.source.guild.name) === normalize(guild.name) &&
     (realmless || normalize(snapshot.source.guild.realm) === normalize(guild.realm)) &&
     snapshot.source.guild.region === guild.region,
-    'The snapshot belongs to another guild.'
+    `The snapshot belongs to "${snapshot.source.guild.name}" (${snapshot.source.guild.region}), not "${guild.name}" (${guild.region}).`,
+    { code: 'GUILD_MISMATCH' }
   );
-  if (scope !== 'guild') assert(snapshot.roster === undefined && snapshot.banks === undefined && snapshot.bankLog === undefined && snapshot.guildMeta === undefined, 'A guild token must authorize roster, bank, and guild info uploads.');
+  if (scope !== 'guild') assert(snapshot.roster === undefined && snapshot.banks === undefined && snapshot.bankLog === undefined && snapshot.guildMeta === undefined, 'A guild token or Guild Master account is required to upload roster, bank, or guild info.', { code: 'GUILD_SCOPE_REQUIRED' });
   const owned = state.characters.filter(c => c.verified && c.active !== false && c.accountId === account.id);
   const ownedKeys = new Set(owned.map(matchKey));
-  assert(ownedKeys.has(matchKey(snapshot.source.character)), 'Verify the source character before syncing.');
+  assert(ownedKeys.has(matchKey(snapshot.source.character)), `Verify source character "${snapshot.source.character.name}" on your Battle.net account before syncing.`, { code: 'UNVERIFIED_SOURCE_CHARACTER', field: 'source.character' });
   const rosterKeys = new Set(state.roster.map(matchKey));
   const permittedKeys = new Set(state.characters.filter(c => c.active !== false && (ownedKeys.has(matchKey(c)) || (scope === 'guild' && rosterKeys.has(matchKey(c))))).map(matchKey));
-  for (const char of snapshot.characters) assert(permittedKeys.has(matchKey(char)), 'Verify each character or use a guild token for current roster data.');
+  for (const char of snapshot.characters) assert(permittedKeys.has(matchKey(char)), `Character "${char.name}" is not verified on your account (or use a guild token for roster data).`, { code: 'UNVERIFIED_CHARACTER', field: 'characters' });
   const designated = new Set((state.designatedBanks ?? []).map(matchKey));
-  for (const bank of snapshot.banks ?? []) assert(designated.has(matchKey(bank)) && normalize(bank.guildName) === normalize(guild.name), 'The guild has not designated this bank character.');
+  for (const bank of snapshot.banks ?? []) assert(designated.has(matchKey(bank)) && normalize(bank.guildName) === normalize(guild.name), `Bank character "${bank.name}" is not designated in Guild Master → Designated bank characters.`, { code: 'UNDESIGNATED_BANK', field: 'banks' });
 }
 export function mergeSnapshot(previous, snapshot, receivedAt, accountId) {
   const state = structuredClone(previous);

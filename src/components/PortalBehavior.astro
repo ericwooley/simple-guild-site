@@ -1,4 +1,85 @@
 <script>
+  class ApiError extends Error {
+    status: number;
+    code?: string;
+    requestId?: string;
+    constructor(message: string, status = 0, code?: string, requestId?: string) {
+      super(message);
+      this.status = status;
+      this.code = code;
+      this.requestId = requestId;
+    }
+  }
+  let globalErrorTimer: number | undefined;
+  function showGlobalError(message: string, meta?: { status?: number; code?: string; requestId?: string }) {
+    let toast = document.querySelector<HTMLElement>('#global-network-error');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'global-network-error';
+      toast.className = 'global-error-toast';
+      toast.setAttribute('role', 'alert');
+      toast.setAttribute('aria-live', 'assertive');
+      const body = document.createElement('div');
+      body.className = 'global-error-body';
+      const text = document.createElement('p');
+      text.className = 'global-error-text';
+      const detail = document.createElement('span');
+      detail.className = 'global-error-meta';
+      body.append(text, detail);
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'global-error-close';
+      close.setAttribute('aria-label', 'Dismiss error');
+      close.textContent = '×';
+      close.addEventListener('click', () => { toast?.remove(); });
+      toast.append(body, close);
+      document.body.appendChild(toast);
+    }
+    const textEl = toast.querySelector<HTMLElement>('.global-error-text');
+    const metaEl = toast.querySelector<HTMLElement>('.global-error-meta');
+    if (textEl) textEl.textContent = message;
+    if (metaEl) {
+      const parts = [
+        meta?.status ? `HTTP ${meta.status}` : '',
+        meta?.code || '',
+        meta?.requestId ? `ref ${meta.requestId}` : '',
+      ].filter(Boolean);
+      metaEl.textContent = parts.join(' · ');
+      metaEl.hidden = parts.length === 0;
+    }
+    window.clearTimeout(globalErrorTimer);
+    globalErrorTimer = window.setTimeout(() => { toast?.remove(); }, 10000);
+  }
+  async function apiRequest(url: string, init: RequestInit, opts: { silent?: boolean } = {}): Promise<any> {
+    let response: Response;
+    try {
+      response = await fetch(url, init);
+    } catch (err) {
+      const detail = err instanceof Error && err.message ? ` (${err.message})` : '';
+      const apiErr = new ApiError(`Network error — could not reach the server${detail}. Check your connection and retry.`, 0, 'NETWORK_ERROR');
+      if (!opts.silent) showGlobalError(apiErr.message, apiErr);
+      throw apiErr;
+    }
+    const contentType = response.headers.get('content-type') || '';
+    let result: any = null;
+    if (contentType.includes('application/json')) {
+      try { result = await response.json(); } catch {}
+    } else {
+      const rawText = await response.text().catch(() => '');
+      if (rawText && rawText.trim().startsWith('{')) {
+        try { result = JSON.parse(rawText); } catch {}
+      }
+    }
+    if (!response.ok || (result && result.ok === false)) {
+      const msg = (result && typeof result.message === 'string' && result.message.trim())
+        ? result.message.trim()
+        : `Server returned HTTP ${response.status}${response.statusText ? ` (${response.statusText})` : ''}.`;
+      const apiErr = new ApiError(msg, response.status, result?.code, result?.requestId);
+      if (!opts.silent) showGlobalError(apiErr.message, apiErr);
+      throw apiErr;
+    }
+    return result ?? { ok: true };
+  }
   async function submitActionForm(form: HTMLFormElement) {
     const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
     const select = form.dataset.autoSubmit === 'true' ? form.querySelector<HTMLSelectElement>('select') : null;
@@ -23,9 +104,7 @@
     form.setAttribute('aria-busy', 'true');
     message.textContent = 'Saving…';
     try {
-      const response = await fetch('/api/actions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const result = await response.json();
-      if (!response.ok || !result.ok) throw new Error(result.message || 'Unable to save. Try again.');
+      const result = await apiRequest('/api/actions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       message.textContent = result.message || 'Saved.';
       if (result.verificationUrl && typeof result.verificationUrl === 'string') {
         const link = document.createElement('a');
@@ -76,7 +155,7 @@
     const markAllBtn = menu.querySelector<HTMLButtonElement>('[data-notif-mark-all]');
     const markRead = async (id?: string) => {
       try {
-        await fetch('/api/actions', {
+        await apiRequest('/api/actions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(id ? { action: 'mark-notifications-read', id } : { action: 'mark-notifications-read' }),
@@ -143,13 +222,11 @@
       btn.title = nextFav ? 'Remove favorite' : 'Add favorite';
       btn.disabled = true;
       try {
-        const res = await fetch('/api/actions', {
+        await apiRequest('/api/actions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'favorite', itemKey })
         });
-        const result = await res.json();
-        if (!res.ok || !result.ok) throw new Error(result.message || 'Could not update favorite.');
         if (!nextFav && new URLSearchParams(location.search).get('favorites') === '1') {
           btn.closest('.roster-row')?.remove();
         }
@@ -597,9 +674,7 @@
       form.setAttribute('aria-busy', 'true');
       message.textContent = 'Uploading…';
       try {
-        const response = await fetch(form.dataset.uploadUrl!, { method: 'POST', body: new FormData(form) });
-        const result = await response.json();
-        if (!response.ok || !result.ok) throw new Error(result.message || 'Unable to upload. Try again.');
+        const result = await apiRequest(form.dataset.uploadUrl!, { method: 'POST', body: new FormData(form) });
         message.textContent = result.message || 'Uploaded.';
         location.reload();
       } catch (error) {

@@ -73,7 +73,7 @@ func buildReverseProxy(target *url.URL, app *App) *httputil.ReverseProxy {
 		} else if sess := app.sessionCookie(); sess != "" {
 			req.AddCookie(&http.Cookie{Name: "hh_session", Value: sess})
 		}
-		if req.Header.Get("Origin") != "" {
+		if req.Header.Get("Origin") != "" || (req.Method != http.MethodGet && req.Method != http.MethodHead && req.Method != http.MethodOptions) {
 			req.Header.Set("Origin", target.Scheme+"://"+target.Host)
 		}
 		if ref := req.Header.Get("Referer"); ref != "" {

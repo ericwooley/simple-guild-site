@@ -5,5 +5,5 @@ export const POST: APIRoute = async ({request, clientAddress}) => {
   try {
     const {cookie,...value} = await handleAction(request,clientAddress);
     return jsonResponse(value,200,cookie ? {'set-cookie':cookie} : {});
-  } catch (error) { return errorResponse(error); }
+  } catch (error) { return errorResponse(error, request); }
 };

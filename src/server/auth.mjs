@@ -14,12 +14,18 @@ export function secureTransport(request) {
 export function requireOrigin(request) {
   secureTransport(request);
   const origin = process.env.APP_ORIGIN || new URL(request.url).origin;
-  if (request.headers.get('origin') !== origin) throw new InputError('Reload this page before submitting the form.',403);
+  const reqOrigin = request.headers.get('origin');
+  if (!reqOrigin) {
+    throw new InputError(`Request rejected: missing Origin header (expected ${origin}). Reload the page or update the desktop app.`, 403, { code: 'MISSING_ORIGIN' });
+  }
+  if (reqOrigin !== origin) {
+    throw new InputError(`Request rejected: Origin "${reqOrigin}" does not match site origin "${origin}".`, 403, { code: 'ORIGIN_MISMATCH' });
+  }
   const expectedHost = new URL(origin).host.toLowerCase();
   const reqUrlOrigin = new URL(request.url).origin;
   const reqHost = (request.headers.get('x-forwarded-host')?.split(',')[0] || request.headers.get('host') || '').trim().toLowerCase();
   if (reqUrlOrigin !== origin && reqHost !== expectedHost) {
-    throw new InputError('Reload this page before submitting the form.',403);
+    throw new InputError(`Request rejected: Host "${reqHost || reqUrlOrigin}" does not match expected host "${expectedHost}".`, 403, { code: 'HOST_MISMATCH' });
   }
 }
 export function cookies(request) {
