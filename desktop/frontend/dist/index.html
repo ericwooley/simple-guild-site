@@ -5,15 +5,78 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Helping Hand Desktop</title>
   <style>
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #15130f; color: #eedcaa; font-family: Georgia, serif; }
-    main { max-width: 480px; padding: 32px; border: 1px solid #6b5837; background: #1e1a13; text-align: center; }
-    p { color: #c4b69a; font-family: system-ui, sans-serif; line-height: 1.6; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at top, #251f15, #15130f 70%); color: #eedcaa; font-family: Georgia, serif; }
+    main { width: min(500px, 100%); padding: 32px; border: 1px solid #8a7243; background: linear-gradient(135deg, #272219, #15130f); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65); }
+    h1 { margin: 0 0 12px; font: 400 24px/1.3 Georgia, serif; color: #f3e2b2; }
+    p { margin: 0 0 18px; color: #c4b69a; font: 14px/1.6 system-ui, sans-serif; }
+    form { display: grid; gap: 14px; }
+    label { display: grid; gap: 6px; font: 500 13px/1.4 system-ui, sans-serif; color: #dbca9e; }
+    input { width: 100%; padding: 10px 12px; border: 1px solid #6b5837; background: #14110c; color: #f3e2b2; font: 14px/1.4 system-ui, sans-serif; }
+    input:focus { outline: 2px solid #c7a35e; outline-offset: 1px; }
+    .actions { display: flex; gap: 10px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+    button { padding: 10px 18px; border: 1px solid #c7a35e; background: linear-gradient(180deg, #4b3d24, #2f2516); color: #f5e5ba; font: 600 14px/1.2 system-ui, sans-serif; cursor: pointer; }
+    button:hover { background: linear-gradient(180deg, #5d4c2d, #3b2f1c); }
+    button:disabled { opacity: 0.6; cursor: wait; }
+    .status { min-height: 20px; margin: 0; font: 13px/1.5 system-ui, sans-serif; color: #e2b86d; }
+    .status.error { color: #f28b82; }
   </style>
 </head>
 <body>
   <main>
-    <h1>Connecting to Guild Hall</h1>
-    <p>Start the local website server or check <code>HELPING_HAND_URL</code>, then reload.</p>
+    <h1>Connect to Guild Server</h1>
+    <p>Enter your guild portal address so Helping Hand Desktop knows which server to load and sync with.</p>
+    <form id="server-setup-form">
+      <label>
+        Server URL
+        <input id="server-url-input" type="text" required placeholder="https://bandofthehelpinghand.com" autocomplete="url" />
+      </label>
+      <p id="setup-status" class="status" role="status" aria-live="polite"><!--SETUP_ERROR--></p>
+      <div class="actions">
+        <button id="connect-btn" type="submit">Connect</button>
+      </div>
+    </form>
   </main>
+  <script>
+    (function () {
+      const form = document.getElementById('server-setup-form');
+      const input = document.getElementById('server-url-input');
+      const statusEl = document.getElementById('setup-status');
+      const btn = document.getElementById('connect-btn');
+
+      if (statusEl && statusEl.textContent.trim()) {
+        statusEl.classList.add('error');
+      }
+
+      const app = window.go && window.go.main && window.go.main.App;
+      if (app && typeof app.GetBridgeStatus === 'function') {
+        app.GetBridgeStatus().then(function (st) {
+          if (st && st.siteUrl && input && !input.value) {
+            input.value = st.siteUrl;
+          }
+        }).catch(function () {});
+      }
+
+      form.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        if (!app || typeof app.SetSiteURL !== 'function') {
+          statusEl.textContent = 'Desktop bridge is still starting. Try again in a moment.';
+          statusEl.classList.add('error');
+          return;
+        }
+        btn.disabled = true;
+        statusEl.classList.remove('error');
+        statusEl.textContent = 'Connecting…';
+        try {
+          await app.SetSiteURL(input.value);
+          window.location.assign('/');
+        } catch (err) {
+          statusEl.textContent = (err && err.message) ? err.message : String(err || 'Invalid server URL.');
+          statusEl.classList.add('error');
+          btn.disabled = false;
+        }
+      });
+    })();
+  </script>
 </body>
 </html>

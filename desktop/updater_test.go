@@ -76,3 +76,20 @@ func TestFindAppBundleForExecutable(t *testing.T) {
 		t.Fatalf("expected empty bundle path for bare binary, got %q", got)
 	}
 }
+
+func TestNormalizeSiteURL(t *testing.T) {
+	got, err := normalizeSiteURL("bandofthehelpinghand.com/")
+	if err != nil || got != "https://bandofthehelpinghand.com" {
+		t.Fatalf("got (%q, %v), want https://bandofthehelpinghand.com", got, err)
+	}
+	got, err = normalizeSiteURL("localhost:4321")
+	if err != nil || got != "http://localhost:4321" {
+		t.Fatalf("got (%q, %v), want http://localhost:4321", got, err)
+	}
+	if _, err := normalizeSiteURL("http://bandofthehelpinghand.com"); err == nil {
+		t.Fatal("expected plaintext non-loopback URL to be rejected")
+	}
+	if _, err := normalizeSiteURL("   "); err == nil {
+		t.Fatal("expected empty URL to be rejected")
+	}
+}

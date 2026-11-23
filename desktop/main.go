@@ -25,7 +25,38 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-func siteProxyHandler(target *url.URL, app *App) http.Handler {
+func serveSetupPage(w http.ResponseWriter, statusCode int, errorMsg string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(statusCode)
+	f, openErr := assets.Open("frontend/dist/index.html")
+	if openErr != nil {
+		_, _ = w.Write([]byte("Helping Hand Desktop setup unavailable."))
+		return
+	}
+	defer f.Close()
+	body, err := io.ReadAll(f)
+	if err != nil {
+		_, _ = w.Write([]byte("Unable to load setup page."))
+		return
+	}
+	if !bytes.Contains(body, []byte("/wails/ipc.js")) {
+		inject := []byte(`<script src="/wails/ipc.js"></script><script src="/wails/runtime.js"></script>`)
+		if idx := bytes.Index(body, []byte("<head>")); idx >= 0 {
+			pos := idx + len("<head>")
+			body = append(append(append([]byte{}, body[:pos]...), inject...), body[pos:]...)
+		} else {
+			body = append(inject, body...)
+		}
+	}
+	if errorMsg != "" {
+		safeErr := strings.ReplaceAll(strings.ReplaceAll(errorMsg, "<", "&lt;"), ">", "&gt;")
+		body = bytes.Replace(body, []byte("<!--SETUP_ERROR-->"), []byte(safeErr), 1)
+	}
+	_, _ = w.Write(body)
+}
+
+func buildReverseProxy(target *url.URL, app *App) *httputil.ReverseProxy {
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	if isLoopbackHost(target.Hostname()) {
 		tr := http.DefaultTransport.(*http.Transport).Clone()
@@ -96,16 +127,20 @@ func siteProxyHandler(target *url.URL, app *App) http.Handler {
 		return nil
 	}
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusBadGateway)
-		if f, openErr := assets.Open("frontend/dist/index.html"); openErr == nil {
-			defer f.Close()
-			_, _ = io.Copy(w, f)
-			return
-		}
-		_, _ = w.Write([]byte("Unable to reach " + target.String()))
+		serveSetupPage(w, http.StatusBadGateway, "Unable to reach "+target.String()+". Verify the server URL or check your connection.")
 	}
 	return proxy
+}
+
+func dynamicSiteProxyHandler(app *App) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxy := app.currentProxy()
+		if proxy == nil {
+			serveSetupPage(w, http.StatusOK, "")
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	})
 }
 
 func isLoopbackHost(host string) bool {
@@ -139,22 +174,42 @@ func validateSiteURL(raw string) (*url.URL, error) {
 	return parsed, nil
 }
 
-func resolveSiteURL() string {
-	raw := strings.TrimSpace(os.Getenv("HELPING_HAND_URL"))
-	if raw == "" {
-		return "http://localhost:4321"
+func normalizeSiteURL(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", fmt.Errorf("enter your guild website URL (for example, https://bandofthehelpinghand.com)")
 	}
-	return strings.TrimRight(raw, "/")
+	if !strings.Contains(trimmed, "://") {
+		hostPart := strings.SplitN(trimmed, "/", 2)[0]
+		hostOnly := strings.SplitN(hostPart, ":", 2)[0]
+		if isLoopbackHost(hostOnly) {
+			trimmed = "http://" + trimmed
+		} else {
+			trimmed = "https://" + trimmed
+		}
+	}
+	parsed, err := validateSiteURL(trimmed)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(parsed.Scheme+"://"+parsed.Host, "/"), nil
 }
 
-func main() {
-	siteURL := resolveSiteURL()
-	target, err := validateSiteURL(siteURL)
+func resolveEnvSiteURL() string {
+	raw := strings.TrimSpace(os.Getenv("HELPING_HAND_URL"))
+	if raw == "" {
+		return ""
+	}
+	norm, err := normalizeSiteURL(raw)
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
+	return norm
+}
 
-	app := NewApp(siteURL)
+func main() {
+	envSiteURL := resolveEnvSiteURL()
+	app := NewApp(envSiteURL)
 
 	appMenu := menu.NewMenu()
 	appMenu.Append(menu.AppMenu())
@@ -169,7 +224,7 @@ func main() {
 		}
 	})
 
-	err = wails.Run(&options.App{
+	err := wails.Run(&options.App{
 		Title:     "Band of the Helping Hand",
 		Width:     1280,
 		Height:    840,
@@ -177,7 +232,7 @@ func main() {
 		MinHeight: 600,
 		Menu:      appMenu,
 		AssetServer: &assetserver.Options{
-			Handler: siteProxyHandler(target, app),
+			Handler: dynamicSiteProxyHandler(app),
 		},
 		BackgroundColour: &options.RGBA{R: 21, G: 19, B: 15, A: 255},
 		OnStartup:        app.startup,

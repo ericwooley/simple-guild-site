@@ -627,6 +627,7 @@
     GetBridgeStatus: () => Promise<BridgeStatus>;
     PickSavedVariablesFile: () => Promise<BridgeStatus>;
     UpdateSettings: (autoSyncOnStart: boolean, pollIntervalSeconds: number, savedVariablesPath: string) => Promise<BridgeStatus>;
+    SetSiteURL?: (rawUrl: string) => Promise<BridgeStatus>;
     SetLaunchAtLogin?: (enabled: boolean) => Promise<BridgeStatus>;
     CheckForUpdates?: () => Promise<BridgeStatus>;
     InstallUpdate?: () => Promise<BridgeStatus>;
@@ -638,6 +639,7 @@
   type BridgeStatus = {
     available: boolean;
     appVersion?: string;
+    siteUrl?: string;
     savedVariablesPath: string;
     autoSyncOnStart: boolean;
     launchAtLogin?: boolean;
@@ -661,6 +663,7 @@
     const settingsForm = document.querySelector<HTMLFormElement>('#desktop-settings-form');
     const autoSyncInput = document.querySelector<HTMLInputElement>('#setting-autosync');
     const launchAtLoginInput = document.querySelector<HTMLInputElement>('#setting-launch-at-login');
+    const siteUrlInput = document.querySelector<HTMLInputElement>('#setting-siteurl');
     const intervalInput = document.querySelector<HTMLInputElement>('#setting-interval');
     const filePathInput = document.querySelector<HTMLInputElement>('#setting-filepath');
     const settingsStatus = document.querySelector<HTMLElement>('#desktop-settings-status');
@@ -669,6 +672,7 @@
     const checkUpdateBtn = document.querySelector<HTMLButtonElement>('#setting-check-update');
     const installUpdateBtn = document.querySelector<HTMLButtonElement>('#setting-install-update');
     let dismissedUpdateVersion = '';
+    let currentSiteUrl = '';
 
     const runOneClickUpdate = async () => {
       if (typeof wailsApp.InstallUpdate !== 'function') return;
@@ -759,6 +763,8 @@
         const status = prefetched ?? await wailsApp.GetBridgeStatus();
         if (autoSyncInput) autoSyncInput.checked = Boolean(status.autoSyncOnStart);
         if (launchAtLoginInput) launchAtLoginInput.checked = Boolean(status.launchAtLogin);
+        currentSiteUrl = status.siteUrl || '';
+        if (siteUrlInput) siteUrlInput.value = currentSiteUrl;
         if (intervalInput) intervalInput.value = String(status.pollIntervalSeconds || 5);
         if (filePathInput) filePathInput.value = status.savedVariablesPath || '';
         if (settingsStatus) settingsStatus.textContent = '';
@@ -813,8 +819,18 @@
         if (launchAtLoginInput && typeof wailsApp.SetLaunchAtLogin === 'function') {
           await wailsApp.SetLaunchAtLogin(Boolean(launchAtLoginInput.checked));
         }
-        if (settingsStatus) settingsStatus.textContent = 'Settings saved.';
-        setTimeout(() => settingsDialog?.close(), 350);
+        const nextSiteUrl = (siteUrlInput?.value || '').trim().replace(/\/+$/, '');
+        let serverChanged = false;
+        if (nextSiteUrl && nextSiteUrl !== currentSiteUrl && typeof wailsApp.SetSiteURL === 'function') {
+          await wailsApp.SetSiteURL(nextSiteUrl);
+          currentSiteUrl = nextSiteUrl;
+          serverChanged = true;
+        }
+        if (settingsStatus) settingsStatus.textContent = serverChanged ? 'Server updated. Reconnecting…' : 'Settings saved.';
+        setTimeout(() => {
+          settingsDialog?.close();
+          if (serverChanged) window.location.assign('/');
+        }, 350);
       } catch (err) {
         if (settingsStatus) {
           settingsStatus.textContent = err instanceof Error ? err.message : 'Unable to save settings.';

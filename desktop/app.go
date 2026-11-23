@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 )
 
 type desktopConfig struct {
+	SiteURL             string `json:"siteUrl,omitempty"`
 	SavedVariablesPath  string `json:"savedVariablesPath"`
 	AutoSyncOnStart     *bool  `json:"autoSyncOnStart,omitempty"`
 	PollIntervalSeconds int    `json:"pollIntervalSeconds,omitempty"`
@@ -56,6 +58,7 @@ type App struct {
 	ctx                 context.Context
 	mu                  sync.Mutex
 	siteURL             string
+	proxy               *httputil.ReverseProxy
 	sessionVal          string
 	pairingCode         string
 	filePath            string
@@ -75,18 +78,65 @@ type App struct {
 	update              UpdateState
 }
 
-func NewApp(siteURL string) *App {
+func NewApp(envSiteURL string) *App {
 	app := &App{
-		siteURL:             siteURL,
 		autoSyncOnStart:     true,
 		launchAtLogin:       isLaunchAtLoginEnabled(),
 		pollIntervalSeconds: 5,
 	}
 	app.loadConfig()
+	if envSiteURL != "" {
+		app.siteURL = envSiteURL
+	}
+	app.rebuildProxyLocked()
 	if app.filePath == "" {
 		app.filePath = discoverSavedVariables()
 	}
 	return app
+}
+
+func (a *App) rebuildProxyLocked() {
+	if a.siteURL == "" {
+		a.proxy = nil
+		return
+	}
+	parsed, err := validateSiteURL(a.siteURL)
+	if err != nil {
+		a.proxy = nil
+		return
+	}
+	a.proxy = buildReverseProxy(parsed, a)
+}
+
+func (a *App) currentProxy() *httputil.ReverseProxy {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.proxy
+}
+
+func (a *App) SetSiteURL(rawURL string) (BridgeStatus, error) {
+	norm, err := normalizeSiteURL(rawURL)
+	if err != nil {
+		return a.GetBridgeStatus(), err
+	}
+	a.mu.Lock()
+	changed := a.siteURL != norm
+	a.siteURL = norm
+	if changed {
+		a.sessionVal = ""
+		a.lastDigest = ""
+		a.lastErr = ""
+	}
+	a.rebuildProxyLocked()
+	a.saveConfigLocked()
+	launchEnabled := a.launchAtLogin
+	status := a.statusLocked()
+	a.mu.Unlock()
+	if launchEnabled {
+		_ = setLaunchAtLogin(true, norm)
+	}
+	a.emitStatus(status)
+	return status, nil
 }
 
 func discoverSavedVariables() string {
@@ -119,8 +169,9 @@ func (a *App) onDomReady(_ context.Context) {
 	firstReady := !a.domReady
 	a.domReady = true
 	autoStart := a.autoSyncOnStart
+	hasServer := a.siteURL != ""
 	a.mu.Unlock()
-	if firstReady && autoStart {
+	if firstReady && autoStart && hasServer {
 		a.StartWatching()
 	}
 }
@@ -160,6 +211,11 @@ func (a *App) loadConfig() {
 	}
 	var cfg desktopConfig
 	if json.Unmarshal(data, &cfg) == nil {
+		if trimmed := strings.TrimSpace(cfg.SiteURL); trimmed != "" {
+			if norm, normErr := normalizeSiteURL(trimmed); normErr == nil {
+				a.siteURL = norm
+			}
+		}
 		a.filePath = strings.TrimSpace(cfg.SavedVariablesPath)
 		if cfg.AutoSyncOnStart != nil {
 			a.autoSyncOnStart = *cfg.AutoSyncOnStart
@@ -178,6 +234,7 @@ func (a *App) saveConfigLocked() {
 	_ = os.MkdirAll(filepath.Dir(path), 0o700)
 	autoStart := a.autoSyncOnStart
 	data, err := json.MarshalIndent(desktopConfig{
+		SiteURL:             a.siteURL,
 		SavedVariablesPath:  a.filePath,
 		AutoSyncOnStart:     &autoStart,
 		PollIntervalSeconds: a.pollIntervalSeconds,
