@@ -664,6 +664,75 @@
       });
     }
   });
+  const bankRequestDialog = document.querySelector<HTMLDialogElement>('#bank-request-dialog');
+  if (bankRequestDialog) {
+    const titleEl = bankRequestDialog.querySelector<HTMLElement>('#bank-request-title');
+    const stockEl = bankRequestDialog.querySelector<HTMLElement>('#bank-request-stock');
+    const banksEl = bankRequestDialog.querySelector<HTMLElement>('#bank-request-banks');
+    const priceEl = bankRequestDialog.querySelector<HTMLElement>('#bank-request-price');
+    const itemKeyInput = bankRequestDialog.querySelector<HTMLInputElement>('#bank-request-item-key');
+    const qtyInput = bankRequestDialog.querySelector<HTMLInputElement>('#bank-request-qty');
+    const noteInput = bankRequestDialog.querySelector<HTMLTextAreaElement>('#bank-request-note');
+    const maxBtn = bankRequestDialog.querySelector<HTMLButtonElement>('#bank-request-qty-max');
+    const decBtn = bankRequestDialog.querySelector<HTMLButtonElement>('#bank-request-qty-dec');
+    const incBtn = bankRequestDialog.querySelector<HTMLButtonElement>('#bank-request-qty-inc');
+    const closeBtn = bankRequestDialog.querySelector<HTMLButtonElement>('#bank-request-close');
+    const msgEl = bankRequestDialog.querySelector<HTMLElement>('.form-message');
+    const submitBtn = bankRequestDialog.querySelector<HTMLButtonElement>('button[type="submit"]');
+    let currentMax = 1;
+
+    const clampQty = (next: number) => {
+      if (!qtyInput) return;
+      const val = Math.max(1, Math.min(currentMax, Math.floor(next || 1)));
+      qtyInput.value = String(val);
+    };
+
+    document.querySelectorAll<HTMLButtonElement>('[data-open-request-modal]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.itemKey || '';
+        const name = btn.dataset.itemName || 'Item';
+        const quality = btn.dataset.itemQuality || '';
+        const max = Math.max(1, Number(btn.dataset.itemMax || '1') || 1);
+        const banks = btn.dataset.itemBanks || '';
+        const price = btn.dataset.itemPrice || '';
+        currentMax = max;
+
+        if (titleEl) {
+          titleEl.textContent = name;
+          titleEl.className = quality;
+        }
+        if (stockEl) stockEl.textContent = `${max} in stock`;
+        if (banksEl) banksEl.textContent = banks;
+        if (priceEl) {
+          priceEl.textContent = price ? `${price} each` : '';
+          priceEl.hidden = !price;
+        }
+        if (itemKeyInput) itemKeyInput.value = key;
+        if (qtyInput) {
+          qtyInput.max = String(max);
+          qtyInput.value = '1';
+        }
+        if (maxBtn) maxBtn.textContent = `Max (${max})`;
+        if (noteInput) noteInput.value = '';
+        if (msgEl) {
+          msgEl.textContent = '';
+          msgEl.removeAttribute('role');
+        }
+        if (submitBtn) submitBtn.disabled = false;
+        if (!bankRequestDialog.open) bankRequestDialog.showModal();
+        qtyInput?.focus();
+        qtyInput?.select();
+      });
+    });
+
+    decBtn?.addEventListener('click', () => clampQty(Number(qtyInput?.value || 1) - 1));
+    incBtn?.addEventListener('click', () => clampQty(Number(qtyInput?.value || 1) + 1));
+    maxBtn?.addEventListener('click', () => clampQty(currentMax));
+    closeBtn?.addEventListener('click', () => bankRequestDialog.close());
+    bankRequestDialog.addEventListener('click', (event) => {
+      if (event.target === bankRequestDialog) bankRequestDialog.close();
+    });
+  }
   document.querySelectorAll<HTMLFormElement>('form[data-upload-url]').forEach((form) => {
     form.addEventListener('submit', async (event) => {
       event.preventDefault();

@@ -276,13 +276,21 @@ const qualityClass = (name: string | null | undefined) => name ? `quality-${name
                   </dl>
                 ))}
               </div>
-              <div>
+              <div class="bank-item-action-col">
                 {item.banks.some(b => !b.viewOnly) && eligible.length ? (
-                  <ActionForm action="request-item" label="Send request" values={{itemKey:item.itemKey,guildId:guild.id}}>
-                    <label>Character<select name="characterId" required>{eligible.map(character => <option value={character.id} selected={character.isMain}>{character.name}</option>)}</select></label>
-                    <label>Quantity<input name="quantity" type="number" min="1" max={item.count} step="1" value="1" required /></label>
-                    <label>Reason / note (optional)<input name="note" type="text" maxlength="300" placeholder="e.g., To make guild bags" /></label>
-                  </ActionForm>
+                  <button
+                    type="button"
+                    class="arcane-btn"
+                    data-open-request-modal
+                    data-item-key={item.itemKey}
+                    data-item-name={item.name}
+                    data-item-quality={qualityClass(item.qualityName)}
+                    data-item-max={String(item.count)}
+                    data-item-banks={item.banks.filter(b => !b.viewOnly).map(b => `${b.name} (${b.count})`).join(', ')}
+                    data-item-price={item.ahPriceFormatted || item.vendorPriceFormatted || ''}
+                  >
+                    Request item
+                  </button>
                 ) : <p class="notice">{eligible.length ? 'This stock is view only.' : 'Requests require a verified guild character.'}</p>}
               </div>
             </div>
@@ -290,6 +298,39 @@ const qualityClass = (name: string | null | undefined) => name ? `quality-${name
           );
         })}
       </div>
+      {eligible.length > 0 && guild && (
+        <dialog id="bank-request-dialog" class="desktop-settings-dialog bank-request-dialog" aria-labelledby="bank-request-title">
+          <div class="card-heading">
+            <h2 id="bank-request-title">Request item</h2>
+            <button id="bank-request-close" type="button" class="arcane-btn arcane-btn-secondary">Cancel</button>
+          </div>
+          <div class="bank-request-summary">
+            <span id="bank-request-stock" class="badge"></span>
+            <span id="bank-request-banks" class="roster-meta"></span>
+            <span id="bank-request-price" class="donation-value" hidden></span>
+          </div>
+          <ActionForm action="request-item" label="Send request" class="stacked-form" values={{ guildId: guild.id }}>
+            <input id="bank-request-item-key" type="hidden" name="itemKey" value="" />
+            <label>Character
+              <select id="bank-request-character" name="characterId" required>
+                {eligible.map(character => <option value={character.id} selected={character.isMain}>{character.name}</option>)}
+              </select>
+            </label>
+            <div class="bank-request-qty-field">
+              <label for="bank-request-qty">Quantity</label>
+              <div class="qty-stepper">
+                <button id="bank-request-qty-dec" type="button" class="btn-subtle" aria-label="Decrease quantity">−</button>
+                <input id="bank-request-qty" name="quantity" type="number" min="1" max="1" step="1" value="1" required />
+                <button id="bank-request-qty-inc" type="button" class="btn-subtle" aria-label="Increase quantity">+</button>
+                <button id="bank-request-qty-max" type="button" class="btn-subtle">Max</button>
+              </div>
+            </div>
+            <label>Reason / note (optional)
+              <textarea id="bank-request-note" name="note" rows="3" maxlength="300" placeholder="e.g., To make guild bags"></textarea>
+            </label>
+          </ActionForm>
+        </dialog>
+      )}
       <Pagination page={itemPage} totalPages={itemsTotalPages} totalItems={items.length} pageSize={itemPageSize} pageUrl={(p: number) => bankUrl({ page: p })} label="Bank inventory pagination" />
       {!items.length && <p class="notice">{bank.length ? 'No items match these filters.' : 'Sync your bank character from the Helping Hand addon to populate guild bank stock.'}</p>}
     </> : tab === 'requests' ? (

@@ -283,11 +283,14 @@ test.describe.serial('Full E2E Guild Flow (Mock Battle.net + Real Postgres + Rea
     await expect(memberPage.getByText('Mageweave Cloth', { exact: true })).toBeVisible();
     await memberPage.locator('.fav-heart').first().click();
     await memberPage.locator('summary:has-text("Mageweave Cloth")').click();
-    await memberPage.locator('details[open] input[name="quantity"]').fill('2');
-    await memberPage.locator('details[open] input[name="note"]').fill('To make guild bags');
+    await memberPage.locator('details[open] button[data-open-request-modal]').click();
+    const reqDialog = memberPage.locator('#bank-request-dialog[open]');
+    await expect(reqDialog).toBeVisible();
+    await reqDialog.locator('input[name="quantity"]').fill('2');
+    await reqDialog.locator('textarea[name="note"]').fill('To make guild bags');
     await Promise.all([
       memberPage.waitForNavigation({ waitUntil: 'networkidle' }),
-      memberPage.locator('details[open] button[type="submit"]:has-text("Send request")').click(),
+      reqDialog.locator('button[type="submit"]:has-text("Send request")').click(),
     ]);
 
     // GM receives New guild bank request email in Mailpit (with the reason note!) and sees unread bell
@@ -349,8 +352,8 @@ test.describe.serial('Full E2E Guild Flow (Mock Battle.net + Real Postgres + Rea
 
     await waitForEmail({ to: 'member@e2e.local', subjectIncludes: 'E2E Raid Night' });
 
-    // Home page shows news in a sortable table + clicking opens /news/<id> with full post & link
-    await expect(gmPage.locator('#news .roster-list[data-sortable-table]')).toBeVisible();
+    // Home page shows news in a vertical feed (not a table) + clicking opens /news/<id> with full post & link
+    await expect(gmPage.locator('#news .news-feed')).toBeVisible();
     await gmPage.locator('a.news-link', { hasText: 'E2E Raid Night' }).click();
     await expect(gmPage).toHaveURL(/\/news\//);
     await expect(gmPage.locator('.news-article-body a[href="https://example.com/guide"]')).toHaveText('Raid Guide');

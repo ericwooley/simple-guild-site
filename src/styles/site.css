@@ -489,6 +489,15 @@ progress.quality-legendary::-moz-progress-bar { background: #ff9c2a; }
 .desktop-settings-dialog::backdrop { background: #000a; }
 .desktop-settings-dialog h2 { font: 400 22px/1.3 Georgia, serif; color: #eedcaa; }
 .desktop-settings-dialog .row-actions { justify-content: flex-end; }
+.bank-item-action-col { display: flex; align-items: flex-start; justify-content: flex-end; }
+.bank-request-dialog .card-heading { margin-bottom: 14px; }
+.bank-request-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin-bottom: 18px; padding: 10px 14px; border: 1px solid #4d3f29; background: #16130d; }
+.bank-request-qty-field { display: grid; gap: 6px; }
+.bank-request-qty-field > label { font: 500 13px/1.3 system-ui, sans-serif; color: #cbbda1; }
+.qty-stepper { display: flex; align-items: center; gap: 8px; }
+.qty-stepper input { width: 92px; text-align: center; }
+.bank-request-dialog textarea { width: 100%; resize: vertical; }
+.bank-request-dialog button[type="submit"] { width: 100%; margin-top: 4px; }
 .pairing-modal-backdrop { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; padding: 20px; background: rgba(0, 0, 0, 0.72); }
 .pairing-modal-card { width: min(460px, 100%); padding: 28px; border: 1px solid #c7a35e; background: linear-gradient(135deg, #272219, #15130f); color: #ede0c2; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8); text-align: center; }
 .pairing-modal-card h2 { margin: 0 0 10px; font: 400 22px/1.3 Georgia, serif; color: #eedcaa; }
