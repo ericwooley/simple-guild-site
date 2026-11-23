@@ -30,6 +30,10 @@ test('cookie actions reject missing or foreign origins and plaintext external ac
   assert.throws(()=>requireOrigin(new Request('http://localhost:4321/api/actions')));
   assert.throws(()=>requireOrigin(new Request('http://localhost:4321/api/actions',{headers:{origin:'https://evil.example'}})));
   assert.throws(()=>secureTransport(new Request('http://example.com/api/sync')));
+  process.env.APP_ORIGIN = 'https://bandofthehelpinghand.com';
+  assert.doesNotThrow(()=>requireOrigin(new Request('https://localhost:4321/api/actions',{headers:{origin:'https://bandofthehelpinghand.com',host:'bandofthehelpinghand.com'}})));
+  assert.throws(()=>requireOrigin(new Request('https://localhost:4321/api/actions',{headers:{origin:'https://bandofthehelpinghand.com',host:'evil.example'}})));
+  assert.throws(()=>requireOrigin(new Request('https://localhost:4321/api/actions',{headers:{origin:'https://evil.example',host:'bandofthehelpinghand.com'}})));
   old === undefined ? delete process.env.APP_ORIGIN : process.env.APP_ORIGIN = old;
 });
 test('JSON input enforces the byte limit before parsing',async()=>{

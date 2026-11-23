@@ -14,7 +14,13 @@ export function secureTransport(request) {
 export function requireOrigin(request) {
   secureTransport(request);
   const origin = process.env.APP_ORIGIN || new URL(request.url).origin;
-  if (request.headers.get('origin') !== origin || new URL(request.url).origin !== origin) throw new InputError('Reload this page before submitting the form.',403);
+  if (request.headers.get('origin') !== origin) throw new InputError('Reload this page before submitting the form.',403);
+  const expectedHost = new URL(origin).host.toLowerCase();
+  const reqUrlOrigin = new URL(request.url).origin;
+  const reqHost = (request.headers.get('x-forwarded-host')?.split(',')[0] || request.headers.get('host') || '').trim().toLowerCase();
+  if (reqUrlOrigin !== origin && reqHost !== expectedHost) {
+    throw new InputError('Reload this page before submitting the form.',403);
+  }
 }
 export function cookies(request) {
   return Object.fromEntries((request.headers.get('cookie') ?? '').split(';').map(v => v.trim().split('=')));
