@@ -119,28 +119,78 @@ async function deliverNotification(db, { account, guildId = null, subject, title
   }
 }
 
+async function resolveAccountGuildIdentity(db, guildId, characterId, characterName) {
+  const acct = await accountForCharacter(db, guildId, characterId, characterName);
+  if (!acct) {
+    const norm = normalize(characterName || '');
+    return {
+      account: null,
+      charIds: characterId ? [characterId] : [],
+      charNorms: norm ? [norm] : [],
+      primaryId: characterId || '',
+      primaryName: characterName || '',
+    };
+  }
+  const { region, guildSlug } = parseBnetGuildId(guildId);
+  const memberRow = (await db.query(
+    `SELECT primary_character_id AS "primaryCharacterId" FROM memberships WHERE account_id=$1 AND guild_id=$2 AND active=true`,
+    [acct.id, guildId]
+  )).rows[0];
+  const gcRows = (await db.query(
+    `SELECT id, name FROM guild_characters WHERE guild_id=$1 AND account_id=$2 AND active=true`,
+    [guildId, acct.id]
+  )).rows;
+  const acRows = guildSlug
+    ? (await db.query(
+        `SELECT id, name FROM account_characters WHERE account_id=$1 AND verified=true AND guild_slug=$2 AND ($3::text IS NULL OR region=$3)`,
+        [acct.id, guildSlug, region]
+      )).rows
+    : [];
+  const allChars = [...gcRows, ...acRows];
+  const idSet = new Set(allChars.map(c => c.id).filter(Boolean));
+  const normSet = new Set(allChars.map(c => normalize(c.name)).filter(Boolean));
+  if (characterId) idSet.add(characterId);
+  if (normalize(characterName || '')) normSet.add(normalize(characterName));
+  const primaryId = memberRow?.primaryCharacterId || characterId || allChars[0]?.id || '';
+  const primaryChar = allChars.find(c => c.id === primaryId);
+  return {
+    account: acct,
+    charIds: [...idSet],
+    charNorms: [...normSet],
+    primaryId,
+    primaryName: primaryChar?.name || characterName || '',
+  };
+}
+
 export async function getCharacterReputation(db, guildId, characterId, characterName) {
-  const norm = normalize(characterName || '');
+  const resolved = await resolveAccountGuildIdentity(db, guildId, characterId, characterName);
+  const charIds = resolved.charIds.length ? resolved.charIds : [''];
+  const charNorms = resolved.charNorms.length ? resolved.charNorms : [''];
   const commRow = (await db.query(
     `SELECT COALESCE(sum(r.points_awarded), 0)::int AS points
      FROM guild_commendation_recipients r
      JOIN guild_commendations c ON c.guild_id = r.guild_id AND c.id = r.commendation_id
-     WHERE r.guild_id=$1 AND c.deleted_at IS NULL AND (r.character_id=$2 OR lower(btrim(r.character_name))=$3)`,
-    [guildId, characterId || '', norm]
+     WHERE r.guild_id=$1 AND c.deleted_at IS NULL AND (r.character_id = ANY($2::text[]) OR lower(btrim(r.character_name)) = ANY($3::text[]))`,
+    [guildId, charIds, charNorms]
   )).rows[0];
   const donRow = (await db.query(
-    `SELECT COALESCE(sum(total_vendor_copper), 0)::numeric::text AS copper FROM guild_bank_transactions WHERE guild_id=$1 AND is_donation=true AND lower(btrim(actor_name))=$2`,
-    [guildId, norm]
+    `SELECT COALESCE(sum(total_vendor_copper), 0)::numeric::text AS copper FROM guild_bank_transactions WHERE guild_id=$1 AND is_donation=true AND lower(btrim(actor_name)) = ANY($2::text[])`,
+    [guildId, charNorms]
   )).rows[0];
   const manualRow = (await db.query(
-    `SELECT COALESCE(sum(copper), 0)::numeric::text AS copper FROM guild_bank_contributions WHERE guild_id=$1 AND (($2 <> '' AND character_id=$2) OR (character_id IS NULL AND $3 <> '' AND lower(btrim(character_name))=$3))`,
-    [guildId, characterId || '', norm]
+    `SELECT COALESCE(sum(copper), 0)::numeric::text AS copper FROM guild_bank_contributions WHERE guild_id=$1 AND (character_id = ANY($2::text[]) OR (character_id IS NULL AND lower(btrim(character_name)) = ANY($3::text[])))`,
+    [guildId, charIds, charNorms]
   )).rows[0];
   const totalCopperBig = BigInt(donRow?.copper ?? '0') + BigInt(manualRow?.copper ?? '0');
   const clampedCopper = totalCopperBig > 0n ? totalCopperBig : 0n;
   const helpingPts = Number(commRow?.points ?? 0);
   const donationPts = donationHonorPoints(clampedCopper);
-  return reputationStanding(helpingPts + donationPts);
+  return {
+    ...reputationStanding(helpingPts + donationPts),
+    accountId: resolved.account?.id ?? null,
+    primaryId: resolved.primaryId,
+    primaryName: resolved.primaryName,
+  };
 }
 
 export async function notifyBankRequestSubmitted({ guildId, guildName, itemName, quantity, characterName, note, requesterAccountId, state, origin }) {
@@ -220,17 +270,21 @@ export async function notifyReputationPromotion({ guildId, guildName, characterI
   const newIdx = STANDING_ORDER.indexOf(newStanding);
   if (newIdx <= oldIdx) return;
   const db = getPool();
-  const acct = await accountForCharacter(db, guildId, characterId, characterName);
+  const resolved = await resolveAccountGuildIdentity(db, guildId, characterId, characterName);
+  const acct = resolved.account;
   if (!acct) return;
-  const link = characterId ? `/character/${encodeURIComponent(characterId)}` : '/roster';
+  const displayName = resolved.primaryName || characterName;
+  const targetCharId = resolved.primaryId || characterId;
+  const link = targetCharId ? `/character/${encodeURIComponent(targetCharId)}` : '/roster';
   const url = `${baseOrigin(origin)}${link}`;
+  const ptsLabel = `${newPoints} ${newPoints === 1 ? 'point' : 'points'}`;
   await deliverNotification(db, {
     account: acct,
     guildId,
-    subject: `[${guildName}] ${characterName} reached ${newStanding}!`,
+    subject: `[${guildName}] ${displayName} reached ${newStanding}!`,
     title: `Guild reputation: ${newStanding}`,
     paragraphs: [
-      `Congratulations! ${characterName} advanced from ${oldStanding} to ${newStanding} (${newPoints} points) in ${guildName}.`,
+      `Congratulations! ${displayName} advanced from ${oldStanding} to ${newStanding} (${ptsLabel}) in ${guildName}.`,
     ],
     ctaLabel: 'View character profile',
     ctaUrl: url,
@@ -353,20 +407,26 @@ export async function notifyFavoritesRestocked({ guildId, guildName, restockedIt
 export async function notifyNewDonations({ guildId, guildName, newDonations = [], origin }) {
   if (!newDonations.length) return;
   const db = getPool();
-  const byActor = new Map();
+  const byAccount = new Map();
   for (const d of newDonations) {
     const norm = normalize(d.actorName);
     if (!norm) continue;
-    const entry = byActor.get(norm) ?? { actorName: d.actorName, items: [], totalCopper: 0 };
+    const resolved = await resolveAccountGuildIdentity(db, guildId, '', d.actorName);
+    if (!resolved.account) continue;
+    const key = resolved.account.id;
+    const entry = byAccount.get(key) ?? {
+      account: resolved.account,
+      displayName: resolved.primaryName || d.actorName,
+      items: [],
+      totalCopper: 0,
+    };
     entry.items.push(d);
     entry.totalCopper += Number(d.totalVendorCopper ?? 0);
-    byActor.set(norm, entry);
+    byAccount.set(key, entry);
   }
   const link = '/bank?tab=history';
   const url = `${baseOrigin(origin)}${link}`;
-  for (const entry of byActor.values()) {
-    const acct = await accountForCharacter(db, guildId, '', entry.actorName);
-    if (!acct) continue;
+  for (const entry of byAccount.values()) {
     const lines = entry.items.slice(0, 12).map(d =>
       d.txType === 'money-deposit'
         ? `• ${formatCopper(d.moneyCopper)} to ${d.bankName}`
@@ -374,12 +434,12 @@ export async function notifyNewDonations({ guildId, guildName, newDonations = []
     );
     const totalLine = entry.totalCopper > 0 ? `Total value recorded: ${formatCopper(entry.totalCopper)}.` : '';
     await deliverNotification(db, {
-      account: acct,
+      account: entry.account,
       guildId,
       subject: `[${guildName}] Thank you for your bank donation!`,
       title: 'New guild bank donation recorded',
       paragraphs: [
-        `Thank you, ${entry.actorName}! Your guild bank donation has been recorded:`,
+        `Thank you, ${entry.displayName}! Your guild bank donation has been recorded:`,
         ...lines,
         ...(totalLine ? [totalLine] : []),
       ],

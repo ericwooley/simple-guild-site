@@ -1301,18 +1301,22 @@ export async function handleSync(request, address) {
         const norm = normalize(d.actorName || '');
         if (norm && !donorByNorm.has(norm)) donorByNorm.set(norm, d.actorName);
       }
+      const notifiedAccounts = new Set();
       for (const [norm, donorName] of donorByNorm.entries()) {
         const beforeStanding = beforeDonorReps.get(norm);
         if (!beforeStanding) continue;
         const charMatch = (mergedState.characters ?? []).find(c => normalize(c.name) === norm)
           ?? (mergedState.roster ?? []).find(r => normalize(r.name) === norm);
         const afterRep = await getCharacterReputation(db, guild.id, charMatch?.id || '', donorName);
+        const dedupeKey = afterRep.accountId ? `acct:${afterRep.accountId}` : `char:${norm}`;
+        if (notifiedAccounts.has(dedupeKey)) continue;
         if (afterRep.standing !== beforeStanding) {
+          notifiedAccounts.add(dedupeKey);
           postCommit.push(() => notifyReputationPromotion({
             guildId: guild.id,
             guildName: guildDisplayName,
-            characterId: charMatch?.id || '',
-            characterName: donorName,
+            characterId: afterRep.primaryId || charMatch?.id || '',
+            characterName: afterRep.primaryName || donorName,
             oldStanding: beforeStanding,
             newStanding: afterRep.standing,
             newPoints: afterRep.count,
