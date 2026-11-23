@@ -1,4 +1,4 @@
-name: Release Desktop App (macOS DMG)
+name: Release (SemVer + macOS DMG)
 
 on:
   push:
@@ -22,6 +22,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Fetch all tags
+        run: git fetch --tags --force
+
+      - name: Compute next semantic version from commits
+        id: ver
+        run: node scripts/next-version.mjs --github-output "$GITHUB_OUTPUT" --notes-file release-notes.md
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -34,7 +41,7 @@ jobs:
 
       - name: Build universal macOS DMG
         env:
-          APP_VERSION: 0.1.${{ github.run_number }}
+          APP_VERSION: ${{ steps.ver.outputs.version }}
           GIT_COMMIT: ${{ github.sha }}
           UPDATE_REPO: ${{ github.repository }}
           UNIVERSAL: "1"
@@ -43,8 +50,8 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: desktop-v0.1.${{ github.run_number }}
-          APP_VERSION: 0.1.${{ github.run_number }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          APP_VERSION: ${{ steps.ver.outputs.version }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" \
@@ -55,7 +62,8 @@ jobs:
             gh release create "$TAG" \
               desktop/build/release/HelpingHand-macOS-universal.dmg \
               desktop/build/release/SHA256SUMS.txt \
+              --target "$GITHUB_SHA" \
               --latest \
-              --title "Helping Hand Desktop v${APP_VERSION}" \
-              --notes "Automated macOS universal DMG build for commit \`${GITHUB_SHA::7}\` on \`main\`."
+              --title "Band of the Helping Hand ${TAG}" \
+              --notes-file release-notes.md
           fi
