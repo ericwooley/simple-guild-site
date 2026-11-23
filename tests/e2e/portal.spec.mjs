@@ -189,3 +189,57 @@ test('members can find recipes and the owner can assign several profession title
     await owner.close();
   }
 });
+
+test('guild-bank sync shows source labels and recent history without duplicate entries', async ({ page }) => {
+  await login(page, 'owner');
+  const issued = await action(page, { action: 'issue-token', scope: 'guild' });
+  expect(issued.response.status()).toBe(200);
+  const token = issued.body.token;
+  const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url'));
+  const capturedAt = Math.floor(Date.now() / 1000);
+  const capture = {
+    schemaVersion: 1, snapshotId: `shared-bank-${randomUUID()}`, capturedAt,
+    source: {
+      addonVersion: '0.1.1', character: {name:'Test Owner',realm:'Test Realm'},
+      guild: {name:'Band of the Helping Hand',realm:'Test Realm',region:'us'},
+    },
+    characters: [{name:'Test Owner',realm:'Test Realm'}],
+    banks: [{
+      name:'Guild bank tab 1',realm:'Test Realm',guildName:'Band of the Helping Hand',
+      sourceKind:'guild-bank',guildTabId:1,guildTabName:'Materials',
+      viewOnly:false,complete:true,observedAt:capturedAt,
+      items:[{itemId:118,count:7,name:'Minor Healing Potion'}],
+    }],
+    guildBankHistory: [{tabId:1,observedAt:capturedAt,entries:[{
+      type:'deposit',actor:'Test Member',itemId:118,itemName:'Minor Healing Potion',count:7,ageSeconds:3600,
+    }]}],
+  };
+  const upload = () => page.request.post('/api/sync', {
+    headers:{Authorization:`Bearer ${token}`},data:capture,
+  });
+  try {
+    expect((await upload()).status()).toBe(200);
+    const duplicate = await upload();
+    expect(duplicate.status()).toBe(200);
+    expect((await duplicate.json()).duplicate).toBe(true);
+    await page.goto('/bank');
+    const potion = page.locator('.inventory-card[data-s-name="Minor Healing Potion"]');
+    await expect(potion.locator('summary')).toContainText('Guild bank · Materials (7)');
+    await expect(potion.locator('summary')).toContainText('Bank character · Test Bank (20)');
+    await test.step('Filter stock by the shared bank source', async () => {
+      await page.locator('form.filter-bar select[name=source]').selectOption('Guild bank tab 1');
+    });
+    await expect(page).toHaveURL(/source=Guild\+bank\+tab\+1/);
+    await expect(potion).toBeVisible();
+    await test.step('Open the recent guild-bank log', async () => {
+      await page.locator('a.explorer-tab[href="/bank?tab=shared-history"]').click();
+    });
+    const history = page.locator('#shared-bank-history');
+    await expect(history.locator('.roster-row')).toHaveCount(1);
+    await expect(history).toContainText('Test Member');
+    await expect(history).toContainText('deposit');
+    await expect(history).toContainText('Minor Healing Potion × 7');
+  } finally {
+    await action(page,{action:'revoke-token',id:claims.jti});
+  }
+});

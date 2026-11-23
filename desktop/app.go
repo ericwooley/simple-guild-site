@@ -197,6 +197,9 @@ func (a *App) shutdown(_ context.Context) {
 }
 
 func configFilePath() (string, error) {
+	if dir := strings.TrimSpace(os.Getenv("HELPING_HAND_CONFIG_DIR")); dir != "" {
+		return filepath.Join(dir, "config.json"), nil
+	}
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
