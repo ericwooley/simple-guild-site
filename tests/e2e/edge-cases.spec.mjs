@@ -166,7 +166,7 @@ test.describe.serial('Odd Scenarios & Edge Cases E2E', () => {
     await otherCtx.close();
   });
 
-  test('2. Same-account alt self-helping is blocked and help points use the helped person’s level / 2 (min 1)', async ({ browser }) => {
+  test('2. Thanks use the author’s level divided by 10 and block same-account awards', async ({ browser }) => {
     await clearMailpit();
     const memberCtx = await browser.newContext();
     const memberPage = await signInNoEmail(memberCtx, 'member', 'Lyra Crafter');
@@ -202,8 +202,7 @@ test.describe.serial('Odd Scenarios & Edge Cases E2E', () => {
     });
     expect(selfExternal.status).toBe(400);
 
-    // Help formula + once-per-day per-account + diminishing returns check:
-    // 1) Level 30 Wandering Stranger thanks Lyra Crafter -> floor(30 / 2) = 15 pts
+    // Level 30 Wandering Stranger gives Lyra Crafter 3 points.
     const ext30 = await postAction(otherPage, {
       action: 'add-external-commendation',
       guildId: 'bnet:us:e2e-test-guild',
@@ -234,8 +233,7 @@ test.describe.serial('Odd Scenarios & Edge Cases E2E', () => {
     });
     expect(sameDayTargetAlt.status).toBe(429);
 
-    // 3) Simulate Day 2 by backdating prior commendation by 2 days -> diminishing returns (halved):
-    //    Level 30 Wandering Stranger thanks Lyra Crafter a 2nd time -> floor(15 / 2) = 7 pts
+    // Backdate the first note. The second note gives 1 point after halving.
     await getPool().query(`UPDATE guild_commendations SET created_at = now() - interval '2 days' WHERE guild_id='bnet:us:e2e-test-guild'`);
     const day2Ext = await postAction(otherPage, {
       action: 'add-external-commendation',
@@ -246,7 +244,7 @@ test.describe.serial('Odd Scenarios & Edge Cases E2E', () => {
     });
     expect(day2Ext.status).toBe(200);
 
-    // 4) Simulate Day 3 -> Tiny Newbie (Lv 5, base 2, 3rd time from this account -> floor(2 / 4) = 0 pts!)
+    // Level 5 Tiny Newbie has 1 base point. The third note from this account gives 0 points.
     await getPool().query(`UPDATE guild_commendations SET created_at = now() - interval '2 days' WHERE guild_id='bnet:us:e2e-test-guild'`);
     const day3Ext = await postAction(otherPage, {
       action: 'add-external-commendation',
@@ -257,7 +255,7 @@ test.describe.serial('Odd Scenarios & Edge Cases E2E', () => {
     });
     expect(day3Ext.status).toBe(200);
 
-    // 5) GM (separate account) switches to Level 12 Grommash Bank and thanks Lyra Crafter -> floor(12 / 2) = 6 pts
+    // The GM switches to level 12 Grommash Bank and gives Lyra Crafter 1 point.
     const sw = await postAction(gmPage, { action: 'set-main', characterId: 'bnet:us:1:9102' });
     expect(sw.status).toBe(200);
     const int12 = await postAction(gmPage, {
@@ -268,10 +266,10 @@ test.describe.serial('Odd Scenarios & Edge Cases E2E', () => {
     expect(int12.status).toBe(200);
     await postAction(gmPage, { action: 'set-main', characterId: 'bnet:us:1:9101' });
 
-    // Total helping points on Lyra Crafter MUST be 15 + 7 + 0 + 6 = 28 (Honored (28))!
+    // Lyra Crafter has 3 + 1 + 0 + 1 = 5 helping points.
     await memberPage.goto(`${BASE_URL}/character/bnet%3Aus%3A1%3A9201`);
-    await expect(memberPage.getByText('Honored (28)')).toBeVisible();
-    await expect(memberPage.getByText('28 helping · 0 donation')).toBeVisible();
+    await expect(memberPage.getByText('Friendly (5)')).toBeVisible();
+    await expect(memberPage.getByText('5 helping · 0 donation')).toBeVisible();
 
     // Opted-out email check: member opted out of emails -> 0 emails in Mailpit, BUT bell has unread notifications!
     await new Promise(r => setTimeout(r, 400));

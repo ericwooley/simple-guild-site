@@ -9,7 +9,7 @@ export function reputationStanding(points = 0) {
 
 export function helpingPointsForLevel(level) {
   const lvl = Number.isFinite(level) && level > 0 ? Math.floor(level) : 1;
-  return Math.max(1, Math.floor(lvl / 2));
+  return Math.max(1, Math.floor(lvl / 10));
 }
 
 export function donationHonorPoints(copper) {

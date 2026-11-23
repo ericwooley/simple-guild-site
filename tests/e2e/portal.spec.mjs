@@ -8,15 +8,6 @@ import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
 
-test.afterEach(async ({ page }) => {
-  if (!page.isClosed()) {
-    await page.evaluate(() => {
-      const token = document.querySelector('#new-token');
-      if (token) token.value = '';
-    }).catch(() => {});
-  }
-});
-
 function luaData(value) {
   if (Array.isArray(value)) return `{${value.map(luaData).join(',')}}`;
   if (value && typeof value === 'object') {
@@ -47,56 +38,64 @@ test('member requests stock and the owner fulfills it without changing inventory
   const officer = await owner.newPage();
   await login(page, 'member');
   await page.goto('/bank');
-  const item = page.locator('.inventory-card').filter({ has: page.getByRole('heading', { name: 'Minor Healing Potion', exact: true }) });
-  const initialStock = await item.locator('.stock-count').textContent();
-  if (await item.getByRole('button', { name: 'Add favorite' }).count()) {
-    await item.getByRole('button', { name: 'Add favorite' }).click();
-  }
-  await expect(item.getByRole('button', { name: 'Remove favorite' })).toBeVisible();
-  await item.getByText('Request this item', { exact: true }).click();
-  await item.getByLabel('Quantity').fill('2');
-  await item.getByRole('button', { name: 'Send request' }).click();
-  await expect(page.getByText(/^pending$/i).first()).toBeVisible();
+  const item = page.locator('.inventory-card[data-s-name="Minor Healing Potion"]');
+  const stock = item.locator('.stock-count-inline');
+  const initialStock = await stock.textContent();
+  const favorite = item.locator('button[data-fav-toggle]');
+  if (await favorite.getAttribute('aria-pressed') === 'false') await favorite.click();
+  await expect(favorite).toHaveAttribute('aria-pressed', 'true');
+  await item.getByText('Minor Healing Potion', { exact: true }).click();
+  await item.getByRole('button', { name: 'Request item', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Minor Healing Potion' });
+  await dialog.getByRole('spinbutton', { name: 'Quantity' }).fill('2');
+  await dialog.getByRole('button', { name: 'Send request' }).click();
+  await expect(dialog).toBeHidden();
+  await page.goto('/bank?tab=requests');
+  const memberRequests = page.locator('#requests');
+  await expect(memberRequests.getByText('pending', { exact: true })).toBeVisible();
   const attempt = await action(page, { action: 'issue-token', scope: 'guild' });
   expect(attempt.response.status()).toBe(403);
   expect(attempt.body.token).toBeUndefined();
   await login(officer, 'owner');
-  await officer.goto('/bank');
-  await officer.getByRole('button', { name: 'Approve', exact: true }).first().click();
-  await expect(officer.getByRole('button', { name: 'Mark fulfilled' }).first()).toBeVisible();
-  await officer.getByRole('button', { name: 'Mark fulfilled' }).first().click();
-  await expect(officer.getByText(/^fulfilled$/i).first()).toBeVisible();
-  await page.reload();
-  await expect(item.locator('.stock-count')).toHaveText(initialStock);
-  await expect(page.getByText(/^fulfilled$/i).first()).toBeVisible();
+  await officer.goto('/bank?tab=requests');
+  const ownerRequests = officer.locator('#requests');
+  await ownerRequests.getByRole('button', { name: 'Approve', exact: true }).click();
+  await ownerRequests.getByRole('button', { name: 'Mark fulfilled', exact: true }).click();
+  await expect(ownerRequests.getByText('Minor Healing Potion', { exact: true })).toHaveCount(0);
+  await ownerRequests.getByLabel('Status').selectOption('fulfilled');
+  await expect(ownerRequests.getByText('fulfilled', { exact: true })).toBeVisible();
+  await page.goto('/bank?tab=requests&rstatus=fulfilled');
+  await expect(memberRequests.getByText('fulfilled', { exact: true })).toBeVisible();
+  await page.goto('/bank');
+  await expect(stock).toHaveText(initialStock);
+  await expect(favorite).toHaveAttribute('aria-pressed', 'true');
   await member.close();
   await owner.close();
 });
 
-test('a copied token accepts one snapshot and rejects uploads after revocation', async ({ page }) => {
+test('the sync API accepts a profession snapshot and identifies duplicate uploads', async ({ page }) => {
   await login(page, 'member');
-  await page.getByRole('button', { name: 'Generate sync token' }).click();
-  const revealed = page.getByLabel('Sync token', { exact: true });
-  await expect(revealed).toBeVisible();
-  const token = await revealed.inputValue();
-  expect(token.split('.').length).toBe(3);
-  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
-  await page.getByRole('button', { name: 'Copy token', exact: true }).click();
-  await expect(page.getByText('Copied. Paste this token into the addon settings.')).toBeVisible();
+  const issued = await action(page, { action: 'issue-token', scope: 'member' });
+  expect(issued.response.status()).toBe(200);
+  const token = issued.body.token;
+  const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url'));
   const snapshot = {
     schemaVersion: 1, snapshotId: `browser-${randomUUID()}`, capturedAt: Math.floor(Date.now() / 1000),
     source: { addonVersion: '0.1.0', character: { name: 'Test Member', realm: 'Test Realm' }, guild: { name: 'Band of the Helping Hand', realm: 'Test Realm', region: 'us' } },
     characters: [{ name: 'Test Member', realm: 'Test Realm', level: 31, className: 'Mage', professions: [{ id: 171, name: 'Alchemy', rank: 155, maxRank: 225 }] }],
   };
   const send = () => page.request.post('/api/sync', { headers: { Authorization: `Bearer ${token}` }, data: snapshot });
-  expect((await send()).status()).toBe(200);
-  const duplicate = await send();
-  expect((await duplicate.json()).duplicate).toBe(true);
-  await page.getByRole('link', { name: 'Done', exact: true }).click();
-  await expect(page.getByText('Level 31 Mage')).toBeVisible();
-  await page.getByRole('button', { name: 'Revoke token', exact: true }).first().click();
-  await expect(page.getByText('Revoked', { exact: true }).first()).toBeVisible();
-  expect((await send()).status()).toBe(401);
+  try {
+    expect((await send()).status()).toBe(200);
+    const duplicate = await send();
+    expect(duplicate.status()).toBe(200);
+    expect((await duplicate.json()).duplicate).toBe(true);
+    await page.reload();
+    await page.locator('#characters summary').filter({ hasText: 'Test Member' }).click();
+    await expect(page.getByText('Level 31 Mage')).toBeVisible();
+  } finally {
+    await action(page, { action: 'revoke-token', id: claims.jti });
+  }
 });
 
 test('anonymous narrow screens expose navigation and withhold guild stock', async ({ page }) => {
@@ -134,6 +133,7 @@ test('sync API accepts a token-authenticated capture and rejects revoked tokens'
     const second = await upload();
     expect(second.status()).toBe(200);
     await page.reload();
+    await page.locator('#characters summary').filter({ hasText: 'Test Member' }).click();
     await expect(page.getByText('Level 32 Mage')).toBeVisible();
     const revoked = await action(page, { action: 'revoke-token', id: claims.jti });
     expect(revoked.response.status()).toBe(200);
@@ -144,34 +144,43 @@ test('sync API accepts a token-authenticated capture and rejects revoked tokens'
   }
 });
 
-test('members offer crafts and the owner assigns several profession titles', async ({ browser }) => {
+test('members can find recipes and the owner can assign several profession titles', async ({ browser }) => {
   const member = await browser.newContext();
   const owner = await browser.newContext();
   try {
     const page = await member.newPage();
     await login(page, 'member');
     await page.goto('/professions');
-    const profession = page.locator('.profession-card').filter({ hasText: 'Test Member' });
-    if (await profession.getByRole('button', { name: 'Offer to guild', exact: true }).count()) {
-      await profession.getByRole('button', { name: 'Offer to guild', exact: true }).click();
-    }
-    await expect(profession.getByRole('button', { name: 'Stop offering', exact: true })).toBeVisible();
-    await page.getByLabel('Offered crafts only').check();
-    await page.getByRole('button', { name: 'Search', exact: true }).click();
-    await expect(profession.getByRole('heading', { name: 'Minor Healing Potion', exact: true })).toBeVisible();
+    await page.getByRole('link', { name: /^By recipe/ }).click();
+    const recipe = page.locator('.roster-row[data-s-name="Minor Healing Potion"]');
+    await page.getByRole('searchbox', { name: 'Find a recipe, profession, or crafter' }).fill('Minor Healing Potion');
+    await expect(page).toHaveURL(/q=Minor\+Healing\+Potion/);
+    const memberProfile = recipe.getByRole('link', { name: 'Test Member', exact: true });
+    const ownerProfile = recipe.getByRole('link', { name: 'Test Owner', exact: true });
+    await expect(memberProfile).toBeVisible();
+    const memberProfileUrl = await memberProfile.getAttribute('href');
+    const ownerProfileUrl = await ownerProfile.getAttribute('href');
+    const offer = await action(page, {
+      action: 'set-offer',
+      recipeKey: 'fixture-member-character:171:2330',
+      offered: true,
+    });
+    expect(offer.response.status()).toBe(200);
     const officer = await owner.newPage();
     await login(officer, 'owner');
-    await officer.goto('/professions');
-    const memberTitles = officer.locator('.title-manager article').filter({ has: officer.getByRole('heading', { name: 'Test Member', exact: true }) });
-    for (const title of ['Guild Alchemist', 'Guild Enchanter']) {
-      await memberTitles.getByLabel('Title', { exact: true }).fill(title);
-      await memberTitles.getByRole('button', { name: 'Assign title', exact: true }).click();
-      await expect(memberTitles.getByRole('button', { name: `Remove ${title}`, exact: true })).toBeVisible();
-    }
-    const ownerTitles = officer.locator('.title-manager article').filter({ has: officer.getByRole('heading', { name: 'Test Owner', exact: true }) });
-    await ownerTitles.getByLabel('Title', { exact: true }).fill('Guild Alchemist');
-    await ownerTitles.getByRole('button', { name: 'Assign title', exact: true }).click();
-    await expect(ownerTitles.getByRole('button', { name: 'Remove Guild Alchemist', exact: true })).toBeVisible();
+    await officer.goto(memberProfileUrl);
+    await officer.getByRole('button', { name: 'Designate as Guild Alchemist', exact: true }).click();
+    await expect(officer.getByRole('button', { name: 'Remove Guild Alchemist', exact: true })).toBeVisible();
+    await officer.getByLabel('Custom title').fill('Guild Enchanter');
+    await officer.getByRole('button', { name: 'Assign custom title', exact: true }).click();
+    await expect(officer.getByRole('button', { name: 'Remove Guild Enchanter', exact: true })).toBeVisible();
+    await officer.goto(ownerProfileUrl);
+    await officer.getByRole('button', { name: 'Designate as Guild Alchemist', exact: true }).click();
+    await expect(officer.getByRole('button', { name: 'Remove Guild Alchemist', exact: true })).toBeVisible();
+    await page.getByLabel('Designated crafters only').check();
+    await expect(page).toHaveURL(/titled=1/);
+    await expect(memberProfile).toBeVisible();
+    await expect(ownerProfile).toBeVisible();
     await page.goto('/account');
     await expect(page.getByText('Guild Alchemist', { exact: true })).toBeVisible();
     await expect(page.getByText('Guild Enchanter', { exact: true })).toBeVisible();
