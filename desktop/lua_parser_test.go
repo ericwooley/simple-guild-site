@@ -42,3 +42,22 @@ func TestReadOutboxValidAndPrivateFieldRejection(t *testing.T) {
 		t.Fatal("expected private field rejection")
 	}
 }
+
+func TestGuildBankHistoryPreservesEmptyEntryArrays(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "HelpingHand.lua")
+	content := `HelpingHandDB = {outbox = {schemaVersion = 1, snapshotId = "guild-bank",
+	  banks = {{name = "Guild bank tab 1", sourceKind = "guild-bank", guildTabId = 1, items = {}}},
+	  guildBankHistory = {{tabId = 1, observedAt = 1700000000, entries = {}}}}}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, _, payload, err := ReadOutbox(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	history := payload["guildBankHistory"].([]any)
+	entries := history[0].(map[string]any)["entries"].([]any)
+	if len(entries) != 0 {
+		t.Fatal("Expected an empty history list.")
+	}
+}

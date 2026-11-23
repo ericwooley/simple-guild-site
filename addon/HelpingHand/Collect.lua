@@ -362,6 +362,12 @@ function H.Collect(includeGuild)
     if includeGuild then
         local roster = H.Roster(identity.realm)
         snapshot.banks = H.Banks(guildName, identity.realm, roster)
+        if H.GuildBankExport then
+            local tabs, history = H.GuildBankExport()
+            snapshot.banks = snapshot.banks or {}
+            for _, tab in ipairs(tabs) do snapshot.banks[#snapshot.banks + 1] = tab end
+            snapshot.guildBankHistory = history
+        end
         snapshot.bankLog = H.BankLog(guildName)
         for _, member in ipairs(roster.members) do member.isGbank = nil end
         snapshot.roster = roster

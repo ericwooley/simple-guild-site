@@ -107,3 +107,33 @@ test('fixture alts remain verified local account characters with one initial mai
   assert.equal(member.find(c=>c.name === 'Member Alt').id,'fixture-member-alt-1');
   for (const config of [{memberAlts:Array(21).fill('Name')},{ownerAlts:[null]},{memberAlts:['Bad\nName']},{bankCharacters:[' ']},{realm:''},null]) assert.throws(()=>fixtureState(config));
 });
+
+test('shared bank tabs retain source identity and enforce guild-scoped uploads', () => {
+  const state = fixtureState();
+  const tab = {name:'Guild bank tab 1', realm:guild.realm, guildName:guild.name,
+    sourceKind:'guild-bank', guildTabId:1, guildTabName:'Materials',
+    viewOnly:false, complete:true, observedAt:Math.floor(now / 1000),
+    items:[{itemId:118, count:7, name:'Minor Healing Potion'}]};
+  const capture = snapshot({banks:[tab], guildBankHistory:[{
+    tabId:1, observedAt:tab.observedAt, entries:[{
+      type:'deposit',actor:'Test Member',itemId:118,itemName:'Minor Healing Potion',count:7,ageSeconds:3600
+    }]
+  }]});
+  assert.doesNotThrow(() => validateSnapshot(capture, now));
+  assert.doesNotThrow(() => authorizeSnapshot(capture,{id:'fixture-owner'},guild,state,'guild'));
+  assert.throws(() => authorizeSnapshot(capture,{id:'fixture-owner'},guild,state,'member'));
+  const merged = mergeSnapshot(state,capture,new Date(now).toISOString(),'fixture-owner');
+  const potion = visibleBank(merged,'fixture-member')[0];
+  assert.equal(potion.count,27);
+  assert.deepEqual(potion.banks.map(source => source.sourceLabel).sort(),
+    ['Bank character · Test Bank','Guild bank · Materials']);
+  const stale = snapshot({banks:[{...tab,observedAt:tab.observedAt-10,items:[]}]});
+  const unchanged = mergeSnapshot(merged,stale,new Date(now).toISOString(),'fixture-owner');
+  assert.equal(visibleBank(unchanged,'fixture-member')[0].count,27);
+  const emptied = mergeSnapshot(merged,snapshot({capturedAt:tab.observedAt+1,
+    banks:[{...tab,observedAt:tab.observedAt+1,items:[]}]}),new Date(now).toISOString(),'fixture-owner');
+  assert.equal(visibleBank(emptied,'fixture-member')[0].count,20);
+  assert.throws(() => validateSnapshot(snapshot({banks:[{...tab,name:'Test Bank'}]}),now));
+  assert.throws(() => validateSnapshot(snapshot({banks:[{...tab,guildTabId:9}]}),now));
+  assert.throws(() => validateSnapshot(snapshot({banks:[{...tab,sourceKind:'native'}]}),now));
+});

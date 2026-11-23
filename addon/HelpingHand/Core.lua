@@ -1,4 +1,4 @@
-HelpingHand = { version = "0.1.0" }
+HelpingHand = { version = "0.1.1" }
 local H = HelpingHand
 
 function H.Plain(value)

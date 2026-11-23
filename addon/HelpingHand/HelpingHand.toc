@@ -2,9 +2,10 @@
 ## Title: Helping Hand
 ## Notes: Guild website sync
 ## Author: Band of the Helping Hand
-## Version: 0.1.0
+## Version: 0.1.1
 ## SavedVariables: HelpingHandDB
 ## OptionalDeps: TOGBankClassic
 Core.lua
 Collect.lua
+GuildBank.lua
 UI.lua

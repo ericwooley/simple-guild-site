@@ -103,3 +103,41 @@ env.C_TradeSkillUI.IsTradeSkillLinked = function() return false end
 env.C_TradeSkillUI.GetAllRecipeIDs = function() error("Incomplete") end
 assert(H.Professions()[1].recipes == nil)
 print("Helping Hand collector checks passed.")
+
+local handler
+env.CreateFrame = function()
+    return {RegisterEvent = function() end, SetScript = function(_, _, callback) handler = callback end}
+end
+env.GetNumGuildBankTabs = function() return 2 end
+env.GetCurrentGuildBankTab = function() return 1 end
+env.GetGuildBankTabInfo = function(tab) return "Materials", nil, tab == 1, true, 0 end
+env.GetItemInfo = function() return "Potion", nil, 1 end
+local occupied = true
+env.GetGuildBankItemInfo = function(_, slot)
+    if occupied and slot <= 2 then return "texture", 3 end
+end
+env.GetGuildBankItemLink = function() return "item:118:2:0:0:0:0:-7" end
+env.QueryGuildBankTab = function(tab) assert(tab == 1) end
+env.QueryGuildBankLog = function(tab) assert(tab == 1) end
+env.GetNumGuildBankTransactions = function() return 1 end
+env.GetGuildBankTransaction = function()
+    return "deposit", "Member", "item:118:2:0:0:0:0:-7", 3, 0, 0, 0, 0, 0, 1
+end
+assert(loadfile(root .. "/addon/HelpingHand/GuildBank.lua", "t", env))()
+handler(nil, "GUILDBANKFRAME_OPENED")
+handler(nil, "GUILDBANKBAGSLOTS_CHANGED", 1)
+handler(nil, "GUILDBANKLOG_UPDATE", 1)
+local tabs, history = H.GuildBankExport()
+assert(#tabs == 1 and tabs[1].viewOnly == true)
+assert(tabs[1].items[1].count == 6 and tabs[1].items[1].suffixId == -7)
+assert(history[1].entries[1].ageSeconds == 3600)
+occupied = false
+handler(nil, "GUILDBANKBAGSLOTS_CHANGED", 1)
+tabs = H.GuildBankExport()
+assert(#tabs[1].items == 0 and tabs[1].complete)
+handler(nil, "GUILDBANKFRAME_CLOSED")
+occupied = true
+handler(nil, "GUILDBANKBAGSLOTS_CHANGED", 1)
+tabs = H.GuildBankExport()
+assert(#tabs[1].items == 0)
+print("Shared guild-bank checks passed.")

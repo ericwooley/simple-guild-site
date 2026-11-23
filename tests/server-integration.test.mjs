@@ -35,7 +35,7 @@ test('PostgreSQL sessions, permissions, tokens, imports, requests, titles and of
     await assert.rejects(()=>act({action:'set-title',characterId:'fixture-owner-character',title:'Guild Alchemist',assigned:true},member));
     const ownerToken = (await act({action:'issue-token',scope:'guild'},owner)).token;
     const memberToken = (await act({action:'issue-token',scope:'member'},member)).token;
-    const body = {schemaVersion:1,snapshotId:'integration-capture',capturedAt:Math.floor(Date.now()/1000),source:{addonVersion:'0.1.0',character:{name:'Test Owner',realm:'Test Realm'},guild:{name:'Band of the Helping Hand',realm:'Test Realm',region:'us'}},characters:[{name:'Test Owner',realm:'Test Realm'}],banks:[{name:'Test Bank',realm:'Test Realm',guildName:'Band of the Helping Hand',viewOnly:false,complete:false,observedAt:null,items:[{itemId:118,count:25,name:'Minor Healing Potion'}]}]};
+    const body = {schemaVersion:1,snapshotId:'integration-capture',capturedAt:Math.floor(Date.now()/1000),source:{addonVersion:'0.1.0',character:{name:'Test Owner',realm:'Test Realm'},guild:{name:'Band of the Helping Hand',realm:'Test Realm',region:'us'}},characters:[{name:'Test Owner',realm:'Test Realm'}],banks:[{name:'Test Bank',realm:'Test Realm',guildName:'Band of the Helping Hand',viewOnly:false,complete:true,observedAt:Math.floor(Date.now()/1000),items:[{itemId:118,count:25,name:'Minor Healing Potion'}]}]};
     await assert.rejects(()=>upload(body,memberToken));
     assert.equal((await upload(body,ownerToken)).ok,true);
     assert.equal((await upload(body,ownerToken)).duplicate,true);
@@ -160,6 +160,22 @@ test('PostgreSQL sessions, permissions, tokens, imports, requests, titles and of
     const helpingHandAfter = await getPortalData(req('/account',null,realCookie));
     assert.equal(helpingHandAfter.guild?.name,'Helping Hand');
     assert.equal(helpingHandAfter.motd?.text,'Welcome to Band of the Helping Hand');
+    const tabTime = Math.floor(Date.now()/1000);
+    const sharedToken = (await act({action:'issue-token',scope:'guild'},owner)).token;
+    const shared = {...body,capturedAt:tabTime,snapshotId:'shared-bank',banks:[{
+      name:'Guild bank tab 1',realm:'Test Realm',guildName:body.source.guild.name,
+      sourceKind:'guild-bank',guildTabId:1,guildTabName:'Supplies',
+      viewOnly:false,complete:true,observedAt:tabTime,items:[{itemId:118,count:4,name:'Minor Healing Potion'}]
+    }],guildBankHistory:[{tabId:1,observedAt:tabTime,entries:[{
+      type:'deposit',actor:'Test Owner',itemId:118,itemName:'Minor Healing Potion',count:4,ageSeconds:3600
+    }]}]};
+    assert.equal((await upload(shared,sharedToken)).ok,true);
+    const sharedPortal = await getPortalData(req('/bank',null,member));
+    assert.equal(sharedPortal.bank.find(item=>item.itemId===118).banks.find(source=>source.sourceKind==='guild-bank').guildTabName,'Supplies');
+    assert.equal(sharedPortal.guildBankHistory.length,1);
+    assert.equal((await upload(shared,sharedToken)).duplicate,true);
+    assert.equal((await getPortalData(req('/bank',null,member))).guildBankHistory.length,1);
+    await assert.rejects(()=>upload({...shared,snapshotId:'member-shared'},memberToken));
     await assert.rejects(()=>finishBattleNet(callback,fakeFetch));
   } finally {
     await getPool().end(); process.env.DATABASE_URL = oldUrl;

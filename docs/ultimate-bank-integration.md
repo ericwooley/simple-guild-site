@@ -9,6 +9,20 @@ The initial test build now implements this boundary in `addon/HelpingHand` and t
 Read [the human test guide](human-testing.md) for current setup, coverage, and verification limits.
 This document retains the pinned source research and integration rules.
 
+## Shared guild-bank tabs
+
+HelpingHand reads visible shared guild-bank tabs through the in-game guild-bank API.
+The desktop app uploads the export after a reload or logout.
+Each tab has a stable source name, tab number, tab name, and scan time.
+Guild-scoped sync authorization applies to shared tabs.
+The website shows shared tabs separately from designated bank characters.
+
+The export includes the recent item transaction log returned by the client.
+The website stores one current log snapshot per tab.
+Newer snapshots replace that tab's previous log window. Older uploads cannot replace newer snapshots.
+Log ages have hour precision. The website marks their dates as approximate.
+These entries appear in Guild-bank history. They do not automatically award donation reputation.
+
 ## Source evidence
 
 Checked on 2026-11-21.

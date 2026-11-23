@@ -19,7 +19,7 @@ const (
 
 var (
 	jwtPattern    = regexp.MustCompile(`^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$`)
-	arrayFields   = map[string]bool{"characters": true, "professions": true, "recipes": true, "members": true, "banks": true, "items": true, "bankLog": true}
+	arrayFields   = map[string]bool{"characters": true, "professions": true, "recipes": true, "members": true, "banks": true, "items": true, "bankLog": true, "guildBankHistory": true, "entries": true}
 	privateFields = map[string]bool{"token": true, "authorization": true, "hidden": true, "password": true, "secret": true}
 )
 

@@ -1,3 +1,4 @@
+import { saveGuildBankHistory, loadGuildBankHistory } from './guildBankHistory.mjs';
 import { randomUUID } from 'node:crypto';
 import { getPool, transaction } from './db.mjs';
 import { cookies, createSession, getIdentity, hash, localMode, opaque, requireOrigin, secureTransport, sessionCookie, signSyncToken, verifySyncToken } from './auth.mjs';
@@ -21,7 +22,7 @@ import { percentileQualityClass } from './rarity.mjs';
 import { loadAccountCharacterProfessions, loadGuildState, saveGuildState } from './guildStore.mjs';
 import { sanitizeNewsHtml, stripHtmlText } from './sanitizeHtml.mjs';
 import { fetchForeverAhSnapshot, formatCopper, importBankTransactions, loadAhPriceMap, lookupMissingVendorPrices, prefetchVendorPrices, refreshGuildTransactionPrices, resolveGuildAhContext, saveFetchedCatalogItems } from './itemPrices.mjs';
-const empty = () => ({account:null,guild:null,characters:[],roster:[],bank:[],bankTransactions:[],bankContributions:[],requests:[],professions:[],tokens:[],syncs:[],commendations:[],activityFeed:[],isGuildMaster:false,permissions:{approveBankRequests:false,assignTitles:false,manageGuildSync:false,manageAnnouncements:false},ranks:[],motd:null,guildInfo:null,news:[],macros:[],designatedBanks:[]});
+const empty = () => ({account:null,guild:null,characters:[],roster:[],bank:[],bankTransactions:[],guildBankHistory:[],bankContributions:[],requests:[],professions:[],tokens:[],syncs:[],commendations:[],activityFeed:[],isGuildMaster:false,permissions:{approveBankRequests:false,assignTitles:false,manageGuildSync:false,manageAnnouncements:false},ranks:[],motd:null,guildInfo:null,news:[],macros:[],designatedBanks:[]});
 const ALL_PERMISSIONS = {approveBankRequests:true,assignTitles:true,manageGuildSync:true,manageAnnouncements:true};
 const NO_PERMISSIONS = {approveBankRequests:false,assignTitles:false,manageGuildSync:false,manageAnnouncements:false};
 function resolveRanks(state) {
@@ -308,6 +309,7 @@ export async function getPortalData(request) {
   const state = await loadGuildState(getPool(), activeGuildId, guild);
   const activeGuildSlug = activeGuildId.startsWith('bnet:') ? activeGuildId.split(':').slice(2).join(':') : null;
   output.guild = guildSummary(guild);
+  output.guildBankHistory = await loadGuildBankHistory(getPool(), guild.id);
   const accountCharacters = accountCharactersRaw.map(c => {
     const guildChar = state.characters.find(gc => gc.id === c.id || (gc.accountId === identity.id && characterKey(gc) === characterKey(c)));
     return safeCharacter(guildChar ? { ...c, titles: guildChar.titles ?? [] } : c, state, activeGuildSlug);
@@ -1452,7 +1454,7 @@ export async function handleSync(request, address) {
     )).rows;
     if (!openFulfilled.length) return;
     const desigNames = new Set((mergedState.designatedBanks ?? []).map(b => normalize(b.name)));
-    const designatedBanks = (mergedState.banks ?? []).filter(b => !desigNames.size || desigNames.has(normalize(b.name)));
+    const designatedBanks = (mergedState.banks ?? []).filter(b => b.sourceKind === 'guild-bank' || !desigNames.size || desigNames.has(normalize(b.name)));
     const reqBanks = designatedBanks.filter(b => !b.viewOnly);
     const bankByNorm = new Map(designatedBanks.map(b => [normalize(b.name), b]));
     // Track ALL designated banks holding each item variant (including viewOnly banks) so toggling a holding bank
@@ -1558,7 +1560,7 @@ export async function handleSync(request, address) {
             if (preAuthorized) {
               const desigNames = new Set((preState.designatedBanks ?? []).map(b => normalize(b.name)));
               const eligibleBankIds = (value.banks ?? [])
-                .filter(b => desigNames.has(normalize(b.name)))
+                .filter(b => b.sourceKind === 'guild-bank' || desigNames.has(normalize(b.name)))
                 .flatMap(b => (b.items ?? []).map(i => i.itemId));
               const { eligible: preLog } = filterDesignatedBankLog(value.bankLog, preState.designatedBanks);
               const logItemIds = preLog.map(e => e.itemId ?? e.itemID).filter(Boolean);
@@ -1638,6 +1640,7 @@ export async function handleSync(request, address) {
         ? { skipRanks: true, skipRoster: true, skipBanks: true, skipFavorites: true, onlyCharacterIds: merged.characters.filter(c => c.accountId === claims.sub).map(c => c.id) }
         : { skipFavorites: true, skipBanks: !Array.isArray(value.banks) || !value.banks.length, skipRoster: !value.roster, skipRanks: !value.roster };
       await saveGuildState(db, guild.id, merged, saveOpts);
+    await saveGuildBankHistory(db, guild.id, value.guildBankHistory);
       if (Array.isArray(value.banks) && value.banks.length) {
         await reconcileFulfilledRequests(db, guild.id, merged);
       }
@@ -1711,6 +1714,7 @@ export async function handleSync(request, address) {
       ? { skipRanks: true, skipRoster: true, skipBanks: true, skipFavorites: true, onlyCharacterIds: merged.characters.filter(c => c.accountId === account.id).map(c => c.id) }
       : { skipFavorites: true, skipBanks: !Array.isArray(value.banks) || !value.banks.length, skipRoster: !value.roster, skipRanks: !value.roster };
     await saveGuildState(db, guild.id, merged, saveOpts);
+    await saveGuildBankHistory(db, guild.id, value.guildBankHistory);
     if (Array.isArray(value.banks) && value.banks.length) {
       await reconcileFulfilledRequests(db, guild.id, merged);
     }

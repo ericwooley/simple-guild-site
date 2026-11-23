@@ -38,7 +38,8 @@
 - Sync its visible bank, bag, and mailbox stock through the companion addon into the website bank tab.
 - Support multiple bank characters and retain each character's stock separately.
 - Show combined stock without counting the same source snapshot twice.
-- Keep bank-character stock distinct from any future shared guild-bank tabs.
+- Sync visible shared guild-bank tabs and their recent deposit, withdrawal, and move history.
+- Label bank-character stock and shared guild-bank stock separately.
 - Exclude items that Ultimate Bank marks as private or hidden.
 - Preserve item IDs, signed random suffixes, enchant IDs, quantities, and source bank identities.
 - Respect view-only bank restrictions when accepting requests.

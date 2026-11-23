@@ -25,7 +25,7 @@ function array(value, max, label) { assert(Array.isArray(value) && value.length 
 function identity(value) { text(value.name, 'character name'); text(value.realm, 'realm'); }
 function optionalText(value, label) { if (value !== undefined && value !== null) text(value, label, 500); }
 export function validateSnapshot(value, now = Date.now()) {
-  fields(value, ['schemaVersion','snapshotId','capturedAt','source','characters','roster','banks','bankLog','guildMeta']);
+  fields(value, ['schemaVersion','snapshotId','capturedAt','source','characters','roster','banks','bankLog','guildMeta','guildBankHistory']);
   assert(value.schemaVersion === 1, 'Unsupported snapshot version.');
   text(value.snapshotId, 'snapshot ID', 160);
   integer(value.capturedAt, 'capture time', 1, Math.floor(now / 1000) + 300);
@@ -77,12 +77,21 @@ export function validateSnapshot(value, now = Date.now()) {
   if (value.banks !== undefined) {
     array(value.banks, 100, 'banks'); const banks = new Set();
     for (const bank of value.banks) {
-      fields(bank, ['name','realm','guildName','viewOnly','complete','observedAt','sourceVersion','sourceKind','itemsKnown','items']); identity(bank); text(bank.guildName, 'bank guild');
+      fields(bank, ['name','realm','guildName','viewOnly','complete','observedAt','sourceVersion','sourceKind','itemsKnown','items','guildTabId','guildTabName']); identity(bank); text(bank.guildName, 'bank guild');
       assert(!banks.has(characterKey(bank)), 'Duplicate bank.'); banks.add(characterKey(bank));
       assert(typeof bank.viewOnly === 'boolean' && typeof bank.complete === 'boolean', 'Invalid bank coverage.');
       if (bank.observedAt !== null && bank.observedAt !== undefined) integer(bank.observedAt, 'bank scan time', 1, value.capturedAt + 300);
       optionalText(bank.sourceVersion, 'source version');
-      if (bank.sourceKind !== undefined && bank.sourceKind !== null) assert(['ultimate-bank', 'native'].includes(bank.sourceKind), 'Invalid bank source kind.');
+      if (bank.sourceKind !== undefined && bank.sourceKind !== null) assert(['ultimate-bank', 'native', 'guild-bank'].includes(bank.sourceKind), 'Invalid bank source kind.');
+      if (bank.sourceKind === 'guild-bank') {
+        integer(bank.guildTabId, 'guild bank tab', 1, 8);
+        text(bank.guildTabName, 'guild bank tab name');
+        assert(bank.name === `Guild bank tab ${bank.guildTabId}`, 'Invalid guild bank source name.');
+        integer(bank.observedAt, 'guild bank scan time', 1, value.capturedAt);
+      } else {
+        assert(bank.guildTabId === undefined && bank.guildTabName === undefined
+          && !/^guild bank tab /i.test(bank.name), 'Invalid bank character source.');
+      }
       if (bank.itemsKnown !== undefined) assert(typeof bank.itemsKnown === 'boolean', 'Invalid bank itemsKnown flag.');
       array(bank.items, 20000, 'bank items'); const keys = new Set();
       for (const item of bank.items) {
@@ -91,6 +100,30 @@ export function validateSnapshot(value, now = Date.now()) {
         optionalText(item.name, 'item name'); if (item.quality !== undefined) integer(item.quality, 'item quality', 0, 8);
         if (item.vendorPrice !== undefined && item.vendorPrice !== null) integer(item.vendorPrice, 'vendor price', 0, 2147483647);
         assert(!keys.has(itemKey(item)), 'Duplicate bank item.'); keys.add(itemKey(item));
+      }
+    }
+  }
+  if (value.guildBankHistory !== undefined) {
+    array(value.guildBankHistory, 8, 'guild bank history');
+    const tabs = new Set();
+    for (const capture of value.guildBankHistory) {
+      fields(capture, ['tabId','observedAt','entries']);
+      integer(capture.tabId, 'history tab', 1, 8);
+      assert(!tabs.has(capture.tabId), 'Duplicate guild bank history tab.');
+      tabs.add(capture.tabId);
+      integer(capture.observedAt, 'history scan time', 1, value.capturedAt);
+      array(capture.entries, 1000, 'guild bank history entries');
+      for (const entry of capture.entries) {
+        fields(entry, ['type','actor','itemId','itemName','count','ageSeconds','fromTab','toTab']);
+        assert(['deposit','withdraw','move'].includes(entry.type), 'Invalid guild bank history type.');
+        text(entry.actor, 'history actor');
+        text(entry.itemName, 'history item', 500);
+        integer(entry.itemId, 'history item ID', 1);
+        integer(entry.count, 'history count', 1, 1000000000);
+        integer(entry.ageSeconds, 'history age', 0, capture.observedAt);
+        for (const tab of [entry.fromTab, entry.toTab]) {
+          if (tab !== undefined && tab !== null) integer(tab, 'history tab', 0, 8);
+        }
       }
     }
   }
@@ -140,7 +173,7 @@ export function authorizeSnapshot(snapshot, account, guild, state, scope) {
     `The snapshot belongs to "${snapshot.source.guild.name}" (${snapshot.source.guild.region}), not "${guild.name}" (${guild.region}).`,
     { code: 'GUILD_MISMATCH' }
   );
-  if (scope !== 'guild') assert(snapshot.roster === undefined && snapshot.banks === undefined && snapshot.bankLog === undefined && snapshot.guildMeta === undefined, 'A guild token or Guild Master account is required to upload roster, bank, or guild info.', { code: 'GUILD_SCOPE_REQUIRED' });
+  if (scope !== 'guild') assert(snapshot.roster === undefined && snapshot.banks === undefined && snapshot.bankLog === undefined && snapshot.guildMeta === undefined && snapshot.guildBankHistory === undefined, 'A guild token or Guild Master account is required to upload roster, bank, or guild info.', { code: 'GUILD_SCOPE_REQUIRED' });
   const owned = state.characters.filter(c => c.verified && c.active !== false && c.accountId === account.id);
   const ownedKeys = new Set(owned.map(matchKey));
   assert(ownedKeys.has(matchKey(snapshot.source.character)), `Verify source character "${snapshot.source.character.name}" on your Battle.net account before syncing.`, { code: 'UNVERIFIED_SOURCE_CHARACTER', field: 'source.character' });
@@ -148,7 +181,7 @@ export function authorizeSnapshot(snapshot, account, guild, state, scope) {
   const permittedKeys = new Set(state.characters.filter(c => c.active !== false && (ownedKeys.has(matchKey(c)) || (scope === 'guild' && rosterKeys.has(matchKey(c))))).map(matchKey));
   for (const char of snapshot.characters) assert(permittedKeys.has(matchKey(char)), `Character "${char.name}" is not verified on your account (or use a guild token for roster data).`, { code: 'UNVERIFIED_CHARACTER', field: 'characters' });
   const designated = new Set((state.designatedBanks ?? []).map(matchKey));
-  for (const bank of snapshot.banks ?? []) assert(designated.has(matchKey(bank)) && normalize(bank.guildName) === normalize(guild.name), `Bank character "${bank.name}" is not designated in Guild Master → Designated bank characters.`, { code: 'UNDESIGNATED_BANK', field: 'banks' });
+  for (const bank of snapshot.banks ?? []) assert((bank.sourceKind === 'guild-bank' || designated.has(matchKey(bank))) && normalize(bank.guildName) === normalize(guild.name), `Bank character "${bank.name}" is not designated in Guild Master → Designated bank characters.`, { code: 'UNDESIGNATED_BANK', field: 'banks' });
 }
 export function mergeSnapshot(previous, snapshot, receivedAt, accountId) {
   const state = structuredClone(previous);
@@ -452,12 +485,12 @@ export function visibleBank(state, accountId) {
     ? new Set(state.designatedBanks.map(b => normalize(b.name)))
     : null;
   for (const source of state.banks) {
-    if (designatedNames && !designatedNames.has(normalize(source.name))) continue;
+    if (source.sourceKind !== 'guild-bank' && designatedNames && !designatedNames.has(normalize(source.name))) continue;
     for (const item of source.items) {
       const key = itemKey(item);
       const row = grouped.get(key) ?? {...item, itemKey:key, name:item.name ?? `Item ${item.itemId}`, count:0, favorite:(state.favorites[accountId] ?? []).includes(key), banks:[]};
       row.count += item.count;
-      row.banks.push({name:source.name, realm:source.realm, count:item.count, viewOnly:source.viewOnly, observedAt:source.observedAt ? new Date(source.observedAt * 1000).toISOString() : null, receivedAt:source.receivedAt, complete:source.complete});
+      row.banks.push({sourceKind:source.sourceKind ?? 'native', guildTabId:source.guildTabId ?? null, guildTabName:source.guildTabName ?? null, sourceLabel:source.sourceKind === 'guild-bank' ? `Guild bank · ${source.guildTabName || source.name}` : `Bank character · ${source.name}`, name:source.name, realm:source.realm, count:item.count, viewOnly:source.viewOnly, observedAt:source.observedAt ? new Date(source.observedAt * 1000).toISOString() : null, receivedAt:source.receivedAt, complete:source.complete});
       grouped.set(key,row);
     }
   }

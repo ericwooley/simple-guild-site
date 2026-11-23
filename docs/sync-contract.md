@@ -64,6 +64,21 @@ The server deduplicates each account's `snapshotId` and rejects reused identifie
 Item identity includes `itemId`, signed `suffixId`, and `enchantId`.
 Raw hidden inventory, Battle.net tokens, sync JWTs, and unrelated SavedVariables never enter an upload payload.
 
+## Shared guild-bank exports
+
+A bank with `sourceKind: "guild-bank"` includes `guildTabId` (1–8) and `guildTabName`.
+Its stable `name` is `Guild bank tab <guildTabId>`.
+A complete capture includes a confirmed `observedAt` and replaces only that tab's stock.
+Guild scope and matching guild identity authorize these sources.
+
+The optional `guildBankHistory` array contains up to eight tab captures.
+Each capture contains `tabId`, `observedAt`, and `entries`.
+An entry contains `type` (deposit, withdraw, move), `actor`, `itemId`, `itemName`, `count`,
+`ageSeconds`, and optional `fromTab` and `toTab`.
+History capture times advance independently of inventory capture times.
+An absent tab or history capture preserves its stored data.
+History snapshots represent the client's recent log window, with approximate event times.
+
 ## Website interface
 
 `src/server/service.mjs` exports `getPortalData(request)` for server-rendered pages.

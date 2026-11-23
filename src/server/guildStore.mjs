@@ -91,7 +91,7 @@ export async function loadGuildState(db, guildId, guildRow = null, { includeRequ
   const offersRes = await db.query(`SELECT recipe_key, offered FROM guild_recipe_offers WHERE guild_id=$1`, [guildId]);
   const rosterRes = await db.query(`SELECT id, name, slug, realm, level, class_name, guild_rank, guild_rank_index, verified, online, zone, updated_at FROM guild_roster_members WHERE guild_id=$1`, [guildId]);
   const designatedRes = await db.query(`SELECT name, realm FROM guild_designated_banks WHERE guild_id=$1 ORDER BY name ASC`, [guildId]);
-  const banksRes = await db.query(`SELECT name, realm, guild_name, view_only, complete, observed_at, captured_at, received_at, source_kind, source_version, view_only_captured_at, stock_changed_at FROM guild_banks WHERE guild_id=$1`, [guildId]);
+  const banksRes = await db.query(`SELECT name, realm, guild_name, view_only, complete, observed_at, captured_at, received_at, source_kind, source_version, view_only_captured_at, stock_changed_at, guild_tab_id, guild_tab_name FROM guild_banks WHERE guild_id=$1`, [guildId]);
   const bankItemsRes = await db.query(`SELECT bank_name, bank_realm, item_id, suffix_id, enchant_id, name, quality, count FROM guild_bank_items WHERE guild_id=$1`, [guildId]);
   const favsRes = await db.query(`SELECT account_id, item_key FROM guild_bank_favorites WHERE guild_id=$1`, [guildId]);
   const reqsRes = includeRequests
@@ -209,6 +209,8 @@ export async function loadGuildState(db, guildId, guildRow = null, { includeRequ
     capturedAt: b.captured_at !== null ? Number(b.captured_at) : null,
     receivedAt: iso(b.received_at),
     sourceKind: b.source_kind ?? null,
+    guildTabId: b.guild_tab_id ?? null,
+    guildTabName: b.guild_tab_name ?? null,
     sourceVersion: b.source_version ?? null,
     viewOnlyCapturedAt: b.view_only_captured_at !== null ? Number(b.view_only_captured_at) : null,
     stockChangedAt: b.stock_changed_at !== null ? Number(b.stock_changed_at) : null,
@@ -451,14 +453,14 @@ export async function saveGuildState(db, guildId, state, opts = {}) {
     await db.query('DELETE FROM guild_banks WHERE guild_id=$1', [guildId]);
     for (const b of state.banks ?? []) {
       await db.query(
-        `INSERT INTO guild_banks(guild_id, name, realm, guild_name, view_only, complete, observed_at, captured_at, received_at, source_kind, source_version, view_only_captured_at, stock_changed_at)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        `INSERT INTO guild_banks(guild_id, name, realm, guild_name, view_only, complete, observed_at, captured_at, received_at, source_kind, source_version, view_only_captured_at, stock_changed_at, guild_tab_id, guild_tab_name)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
          ON CONFLICT(guild_id, name, realm) DO UPDATE SET
            guild_name=excluded.guild_name, view_only=excluded.view_only, complete=excluded.complete,
            observed_at=excluded.observed_at, captured_at=excluded.captured_at, received_at=excluded.received_at,
            source_kind=excluded.source_kind, source_version=excluded.source_version, view_only_captured_at=excluded.view_only_captured_at,
-           stock_changed_at=excluded.stock_changed_at`,
-        [guildId, b.name, b.realm || '', b.guildName ?? null, Boolean(b.viewOnly), Boolean(b.complete), b.observedAt ?? null, b.capturedAt ?? null, b.receivedAt ?? null, b.sourceKind ?? null, b.sourceVersion ?? null, b.viewOnlyCapturedAt ?? null, b.stockChangedAt ?? null]
+           stock_changed_at=excluded.stock_changed_at, guild_tab_id=excluded.guild_tab_id, guild_tab_name=excluded.guild_tab_name`,
+        [guildId, b.name, b.realm || '', b.guildName ?? null, Boolean(b.viewOnly), Boolean(b.complete), b.observedAt ?? null, b.capturedAt ?? null, b.receivedAt ?? null, b.sourceKind ?? null, b.sourceVersion ?? null, b.viewOnlyCapturedAt ?? null, b.stockChangedAt ?? null, b.guildTabId ?? null, b.guildTabName ?? null]
       );
       for (const item of b.items ?? []) {
         await db.query(
