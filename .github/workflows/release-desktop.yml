@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'desktop/**'
+      - 'scripts/package-desktop-dmg.sh'
+      - 'scripts/next-version.mjs'
+      - 'public/icon-512.png'
+      - '.github/workflows/release-desktop.yml'
   workflow_dispatch:
 
 permissions:
