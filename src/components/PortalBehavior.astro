@@ -842,20 +842,60 @@
         }
       }
     });
+    let lastPairingCode = '';
     const showPairingBanner = (code: string) => {
-      let banner = document.querySelector<HTMLElement>('#desktop-pairing-banner');
-      if (!code) {
-        banner?.remove();
+      const normalized = (code || '').trim();
+      if (normalized === lastPairingCode) return;
+      lastPairingCode = normalized;
+      let overlay = document.querySelector<HTMLElement>('#desktop-pairing-modal');
+      if (!normalized) {
+        overlay?.remove();
         return;
       }
-      if (!banner) {
-        banner = document.createElement('div');
-        banner.id = 'desktop-pairing-banner';
-        banner.setAttribute('role', 'status');
-        banner.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9999;padding:14px 18px;background:#1e1a13;border:1px solid #c7a35e;color:#eedcaa;box-shadow:0 6px 24px rgba(0,0,0,0.6);font-family:system-ui,sans-serif;';
-        document.body.appendChild(banner);
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'desktop-pairing-modal';
+        overlay.className = 'pairing-modal-backdrop';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.setAttribute('aria-labelledby', 'pairing-modal-title');
+        overlay.innerHTML = `
+          <div class="pairing-modal-card">
+            <h2 id="pairing-modal-title">Approve Desktop Sign-In</h2>
+            <p class="pairing-modal-hint">Enter this pairing code in your browser to finish signing in with Battle.net.</p>
+            <div class="pairing-code-row">
+              <code id="pairing-code-value" class="pairing-code-value"></code>
+              <button id="pairing-code-copy" type="button" class="arcane-btn">Copy code</button>
+            </div>
+            <p id="pairing-copy-status" class="pairing-copy-status" role="status" aria-live="polite"></p>
+          </div>
+        `;
+        document.body.appendChild(overlay);
+        const copyBtn = overlay.querySelector<HTMLButtonElement>('#pairing-code-copy');
+        const copyStatus = overlay.querySelector<HTMLElement>('#pairing-copy-status');
+        copyBtn?.addEventListener('click', async () => {
+          const val = overlay?.querySelector<HTMLElement>('#pairing-code-value')?.textContent || '';
+          if (!val) return;
+          try {
+            await navigator.clipboard.writeText(val);
+            if (copyStatus) copyStatus.textContent = 'Copied to clipboard.';
+            if (copyBtn) copyBtn.textContent = 'Copied';
+            setTimeout(() => { if (copyBtn) copyBtn.textContent = 'Copy code'; }, 1800);
+          } catch {
+            const range = document.createRange();
+            const codeEl = overlay?.querySelector<HTMLElement>('#pairing-code-value');
+            if (codeEl) {
+              range.selectNodeContents(codeEl);
+              const sel = window.getSelection();
+              sel?.removeAllRanges();
+              sel?.addRange(range);
+            }
+            if (copyStatus) copyStatus.textContent = 'Press ⌘C to copy the highlighted code.';
+          }
+        });
       }
-      banner.textContent = `Desktop pairing code: ${code} — enter this code in your browser to approve sign-in.`;
+      const codeEl = overlay.querySelector<HTMLElement>('#pairing-code-value');
+      if (codeEl && codeEl.textContent !== normalized) codeEl.textContent = normalized;
     };
     const wailsEvents = (window as any).runtime?.EventsOn;
     if (typeof wailsEvents === 'function') {

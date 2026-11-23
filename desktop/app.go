@@ -25,6 +25,7 @@ import (
 
 type desktopConfig struct {
 	SiteURL             string `json:"siteUrl,omitempty"`
+	SessionCookie       string `json:"sessionCookie,omitempty"`
 	SavedVariablesPath  string `json:"savedVariablesPath"`
 	AutoSyncOnStart     *bool  `json:"autoSyncOnStart,omitempty"`
 	PollIntervalSeconds int    `json:"pollIntervalSeconds,omitempty"`
@@ -86,6 +87,9 @@ func NewApp(envSiteURL string) *App {
 	}
 	app.loadConfig()
 	if envSiteURL != "" {
+		if envSiteURL != app.siteURL {
+			app.sessionVal = ""
+		}
 		app.siteURL = envSiteURL
 	}
 	app.rebuildProxyLocked()
@@ -216,6 +220,7 @@ func (a *App) loadConfig() {
 				a.siteURL = norm
 			}
 		}
+		a.sessionVal = strings.TrimSpace(cfg.SessionCookie)
 		a.filePath = strings.TrimSpace(cfg.SavedVariablesPath)
 		if cfg.AutoSyncOnStart != nil {
 			a.autoSyncOnStart = *cfg.AutoSyncOnStart
@@ -235,6 +240,7 @@ func (a *App) saveConfigLocked() {
 	autoStart := a.autoSyncOnStart
 	data, err := json.MarshalIndent(desktopConfig{
 		SiteURL:             a.siteURL,
+		SessionCookie:       a.sessionVal,
 		SavedVariablesPath:  a.filePath,
 		AutoSyncOnStart:     &autoStart,
 		PollIntervalSeconds: a.pollIntervalSeconds,
@@ -255,6 +261,9 @@ func (a *App) setSessionCookie(value string) {
 	a.mu.Lock()
 	changed := a.sessionVal != value
 	a.sessionVal = value
+	if changed {
+		a.saveConfigLocked()
+	}
 	status := a.statusLocked()
 	a.mu.Unlock()
 	if changed {
