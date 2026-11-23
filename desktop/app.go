@@ -630,9 +630,15 @@ func uploadOutbox(baseURL, sessionVal, token string, body []byte) error {
 		return errors.New("Cannot reach the website. Check your connection and retry.")
 	}
 	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 16384))
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 16384))
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return nil
+	}
+	var errPayload struct {
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(respBody, &errPayload) == nil && strings.TrimSpace(errPayload.Message) != "" {
+		return errors.New(strings.TrimSpace(errPayload.Message))
 	}
 	switch resp.StatusCode {
 	case 401:
