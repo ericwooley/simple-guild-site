@@ -25,21 +25,29 @@ export function requireOrigin(request) {
 export function cookies(request) {
   return Object.fromEntries((request.headers.get('cookie') ?? '').split(';').map(v => v.trim().split('=')));
 }
-export function sessionCookie(value, request, maxAge = 86400) {
+const SESSION_TTL_SECONDS = 30 * 86400;
+const SESSION_RENEW_THRESHOLD_MS = 15 * 86400 * 1000;
+export function sessionCookie(value, request, maxAge = SESSION_TTL_SECONDS) {
   return `hh_session=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${new URL(request.url).protocol === 'https:' ? '; Secure' : ''}`;
 }
 export async function createSession(db, accountId, now = new Date()) {
   const id = opaque();
-  await db.query('INSERT INTO sessions(id_hash,account_id,expires_at) VALUES($1,$2,$3)', [hash(id), accountId, new Date(now.getTime()+86400000)]);
+  await db.query('INSERT INTO sessions(id_hash,account_id,expires_at) VALUES($1,$2,$3)', [hash(id), accountId, new Date(now.getTime() + SESSION_TTL_SECONDS * 1000)]);
   return id;
 }
 export async function getIdentity(request, db = getPool()) {
   secureTransport(request);
   const cookie = cookies(request).hh_session;
   if (!cookie || !/^[A-Za-z0-9_-]{43}$/.test(cookie)) return null;
-  const result = await db.query(`SELECT a.id,a.battle_tag AS "battleTag",a.test_account AS "testAccount",a.characters_synced_at AS "charactersSyncedAt",a.characters_sync_error AS "charactersSyncError",a.email,a.email_verified AS "emailVerified",a.email_opted_out AS "emailOptedOut",a.email_prompted_at AS "emailPromptedAt",m.guild_id AS "guildId",m.role FROM sessions s JOIN accounts a ON a.id=s.account_id LEFT JOIN memberships m ON m.account_id=a.id AND m.active=true WHERE s.id_hash=$1 AND s.expires_at>now() ORDER BY m.guild_id LIMIT 1`, [hash(cookie)]);
+  const idHash = hash(cookie);
+  const result = await db.query(`SELECT s.expires_at AS "sessionExpiresAt",a.id,a.battle_tag AS "battleTag",a.test_account AS "testAccount",a.characters_synced_at AS "charactersSyncedAt",a.characters_sync_error AS "charactersSyncError",a.email,a.email_verified AS "emailVerified",a.email_opted_out AS "emailOptedOut",a.email_prompted_at AS "emailPromptedAt",m.guild_id AS "guildId",m.role FROM sessions s JOIN accounts a ON a.id=s.account_id LEFT JOIN memberships m ON m.account_id=a.id AND m.active=true WHERE s.id_hash=$1 AND s.expires_at>now() ORDER BY m.guild_id LIMIT 1`, [idHash]);
   const identity = result.rows[0] ?? null;
-  if (identity?.testAccount && !localMode(request)) return null;
+  if (!identity) return null;
+  if (identity.testAccount && !localMode(request)) return null;
+  if (identity.sessionExpiresAt instanceof Date && identity.sessionExpiresAt.getTime() - Date.now() < SESSION_RENEW_THRESHOLD_MS) {
+    db.query('UPDATE sessions SET expires_at=$2 WHERE id_hash=$1', [idHash, new Date(Date.now() + SESSION_TTL_SECONDS * 1000)]).catch(() => {});
+  }
+  delete identity.sessionExpiresAt;
   return identity;
 }
 function secret() {
