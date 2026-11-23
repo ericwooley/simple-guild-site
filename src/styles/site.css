@@ -472,6 +472,10 @@ progress.quality-legendary::-moz-progress-bar { background: #ff9c2a; }
 .token-reveal { margin-top: 24px; padding: 24px; border: 1px solid #c7a35e; background: #211c12; }
 .token-reveal p { margin: 14px 0; color: #dbca9e; font: 14px/1.6 system-ui,sans-serif; }
 .token-reveal textarea { font-family: monospace; overflow-wrap: anywhere; margin-bottom: 14px; }
+.email-verify-banner { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 18px; margin-bottom: 20px; padding: 12px 18px; border: 1px solid #c7a35e88; background: linear-gradient(135deg, #2b2316, #1b160e); color: #ede0c2; font: 14px/1.5 system-ui,sans-serif; }
+.email-verify-banner p { margin: 0; }
+.email-verify-banner strong { color: #f5e2b0; }
+.email-verify-banner .inline-action { margin: 0; }
 .desktop-bridge { margin-bottom: 24px; padding: 20px; border: 1px solid #c7a35e70; background: #211c12; display: grid; gap: 16px; }
 .desktop-bridge .row-actions { justify-content: flex-start; }
 .primary-choice-list { display: grid; gap: 8px; margin: 12px 0; }

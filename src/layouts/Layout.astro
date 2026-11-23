@@ -24,7 +24,7 @@ Astro.response.headers.set('Referrer-Policy', 'same-origin');
 <meta property="og:image" content={logoUrl || '/guild-crest.png'} />
 <title>{title} · {guildName}</title>
 </head><body class="theme-arcane"><a class="skip-link" href="#main">Skip to content</a>
-<Navigation account={account} guild={guild} characters={characters} isGuildMaster={isGuildMaster} /><main id="main" tabindex="-1"><slot /></main>
+<Navigation account={account} guild={guild} characters={characters} isGuildMaster={isGuildMaster} /><main id="main" tabindex="-1">{account?.email && !account.emailVerified && (<div class="email-verify-banner" role="status"><p>Your email (<strong>{account.email}</strong>) is not verified yet — guild email notifications are paused until you verify it.</p><ActionForm action="set-notification-email" label="Resend verification email" values={{ email: account.email }} class="inline-action" buttonClass="btn-subtle" /></div>)}<slot /></main>
 <footer class="site-footer"><a href="/">{guildName}</a><span>WoW Forever</span><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="#main">Back to top</a></footer>
 <dialog id="desktop-settings-dialog" class="desktop-settings-dialog" aria-labelledby="desktop-settings-title">
   <form id="desktop-settings-form" class="stacked-form">
