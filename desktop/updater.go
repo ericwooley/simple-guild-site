@@ -482,12 +482,12 @@ func (a *App) InstallUpdate() (BridgeStatus, error) {
 	if err := os.MkdirAll(mountDir, 0o700); err != nil {
 		return fail(err)
 	}
-	attachCmd := exec.Command("hdiutil", "attach", "-nobrowse", "-readonly", "-mountpoint", mountDir, dmgPath)
+	attachCmd := exec.Command("/usr/bin/hdiutil", "attach", "-nobrowse", "-readonly", "-mountpoint", mountDir, dmgPath)
 	if out, err := attachCmd.CombinedOutput(); err != nil {
 		return fail(fmt.Errorf("failed to mount update DMG: %v (%s)", err, strings.TrimSpace(string(out))))
 	}
 	defer func() {
-		_ = exec.Command("hdiutil", "detach", mountDir, "-quiet").Run()
+		_ = exec.Command("/usr/bin/hdiutil", "detach", mountDir, "-quiet").Run()
 	}()
 
 	matches, _ := filepath.Glob(filepath.Join(mountDir, "*.app"))
@@ -507,36 +507,60 @@ func (a *App) InstallUpdate() (BridgeStatus, error) {
 	pid := os.Getpid()
 
 	if targetApp != "" {
+		if strings.HasPrefix(targetApp, "/Volumes/") {
+			targetApp = "/Applications/HelpingHand.app"
+		}
 		// Stage the new .app next to the current .app so permission failures surface before quitting.
 		stagedApp := filepath.Join(filepath.Dir(targetApp), ".HelpingHand.app.new")
 		_ = os.RemoveAll(stagedApp)
-		dittoCmd := exec.Command("ditto", srcApp, stagedApp)
+		dittoCmd := exec.Command("/usr/bin/ditto", srcApp, stagedApp)
 		if out, err := dittoCmd.CombinedOutput(); err != nil {
-			return fail(fmt.Errorf("cannot write update to %s: %v (%s)", filepath.Dir(targetApp), err, strings.TrimSpace(string(out))))
+			// Fall back to opening the DMG in Finder so the user can drag-and-drop into Applications.
+			_ = exec.Command("/usr/bin/hdiutil", "detach", mountDir, "-quiet").Run()
+			cleanupTmp = false
+			_ = exec.Command("/usr/bin/open", dmgPath).Start()
+			return fail(fmt.Errorf("macOS blocked direct write to %s — opened the update DMG in Finder so you can drag HelpingHand.app into Applications (%s)", filepath.Dir(targetApp), strings.TrimSpace(string(out))))
 		}
-		_ = exec.Command("xattr", "-dr", "com.apple.quarantine", stagedApp).Run()
+		_ = exec.Command("/usr/bin/xattr", "-dr", "com.apple.quarantine", stagedApp).Run()
 
 		backupApp := filepath.Join(filepath.Dir(targetApp), ".HelpingHand.app.old")
+		logPath := "/tmp/helpinghand-update.log"
+		if home, hErr := os.UserHomeDir(); hErr == nil && home != "" {
+			_ = os.MkdirAll(filepath.Join(home, "Library", "Logs"), 0o755)
+			logPath = filepath.Join(home, "Library", "Logs", "HelpingHand-update.log")
+		}
 		script := fmt.Sprintf(`#!/bin/sh
+exec >>%s 2>&1
+echo "[$(date -u +%%FT%%TZ)] Applying HelpingHand update to %s (waiting for PID %d)"
 PID=%d
-while kill -0 "$PID" 2>/dev/null; do
+i=0
+while kill -0 "$PID" 2>/dev/null && [ "$i" -lt 100 ]; do
   sleep 0.2
+  i=$((i + 1))
 done
-rm -rf %s
-mv %s %s && mv %s %s
-if [ $? -eq 0 ]; then
-  rm -rf %s
-  open -n %s
+/bin/rm -rf %s
+if [ -e %s ]; then
+  /bin/mv %s %s && /bin/mv %s %s
 else
-  mv %s %s 2>/dev/null
+  /bin/mv %s %s
 fi
-`, pid,
+if [ $? -eq 0 ]; then
+  /bin/rm -rf %s
+  echo "[$(date -u +%%FT%%TZ)] Update swapped cleanly, relaunching..."
+  /usr/bin/open -n %s
+else
+  echo "[$(date -u +%%FT%%TZ)] ERROR swapping app bundle, restoring backup..."
+  [ -e %s ] && /bin/mv %s %s 2>/dev/null
+fi
+`, shellQuote(logPath), targetApp, pid, pid,
 			shellQuote(backupApp),
+			shellQuote(targetApp),
 			shellQuote(targetApp), shellQuote(backupApp),
+			shellQuote(stagedApp), shellQuote(targetApp),
 			shellQuote(stagedApp), shellQuote(targetApp),
 			shellQuote(backupApp),
 			shellQuote(targetApp),
-			shellQuote(backupApp), shellQuote(targetApp),
+			shellQuote(backupApp), shellQuote(backupApp), shellQuote(targetApp),
 		)
 		scriptPath := filepath.Join(tmpDir, "apply-update.sh")
 		if err := os.WriteFile(scriptPath, []byte(script), 0o700); err != nil {
@@ -544,11 +568,12 @@ fi
 			return fail(err)
 		}
 		// Detach DMG before spawning helper and quitting.
-		_ = exec.Command("hdiutil", "detach", mountDir, "-quiet").Run()
+		_ = exec.Command("/usr/bin/hdiutil", "detach", mountDir, "-quiet").Run()
 		_ = os.Remove(dmgPath)
 		cleanupTmp = false
 
-		cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("%s; rm -rf %s", shellQuote(scriptPath), shellQuote(tmpDir)))
+		cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("%s; /bin/rm -rf %s", shellQuote(scriptPath), shellQuote(tmpDir)))
+		detachCmd(cmd)
 		if err := cmd.Start(); err != nil {
 			return fail(err)
 		}
@@ -576,21 +601,24 @@ fi
 
 		script := fmt.Sprintf(`#!/bin/sh
 PID=%d
-while kill -0 "$PID" 2>/dev/null; do
+i=0
+while kill -0 "$PID" 2>/dev/null && [ "$i" -lt 100 ]; do
   sleep 0.2
+  i=$((i + 1))
 done
-mv -f %s %s && nohup %s >/dev/null 2>&1 </dev/null &
+/bin/mv -f %s %s && nohup %s >/dev/null 2>&1 </dev/null &
 `, pid, shellQuote(stagedBin), shellQuote(execPath), shellQuote(execPath))
 		scriptPath := filepath.Join(tmpDir, "apply-update.sh")
 		if err := os.WriteFile(scriptPath, []byte(script), 0o700); err != nil {
 			_ = os.Remove(stagedBin)
 			return fail(err)
 		}
-		_ = exec.Command("hdiutil", "detach", mountDir, "-quiet").Run()
+		_ = exec.Command("/usr/bin/hdiutil", "detach", mountDir, "-quiet").Run()
 		_ = os.Remove(dmgPath)
 		cleanupTmp = false
 
-		cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("%s; rm -rf %s", shellQuote(scriptPath), shellQuote(tmpDir)))
+		cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("%s; /bin/rm -rf %s", shellQuote(scriptPath), shellQuote(tmpDir)))
+		detachCmd(cmd)
 		if err := cmd.Start(); err != nil {
 			return fail(err)
 		}

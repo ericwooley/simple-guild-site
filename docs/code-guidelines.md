@@ -2,7 +2,7 @@
 
 ## Lists over cards for long collections
 
-- All row-based list components (guild roster, professions/crafters, recipes, guild bank inventory, guild bank requests, bank history, sync history, guild news lists, and account characters) must use the standard sortable table structure (`.roster-list[data-sortable-table]` with `.roster-table-header`, clickable `button.sort-header[data-sort-col]`, and `.roster-row` items carrying `data-s0`..`data-sN` sort keys) rather than ad-hoc stacked `.record-list` / `.record-row` blocks.
+- All row-based list components (guild roster, professions/crafters, recipes, guild bank inventory, guild bank requests, bank history, sync history, guild news admin list, and account characters) must use the standard sortable table structure (`.roster-list[data-sortable-table]` with `.roster-table-header`, clickable `button.sort-header[data-sort-col]`, and `.roster-row` items carrying `data-s0`..`data-sN` sort keys) rather than ad-hoc stacked `.record-list` / `.record-row` blocks. Exception: the home page **Guild news** feed uses a compact vertical prose feed (`.news-feed`) so multi-line post excerpts read cleanly in the narrow side column.
 - Use compact, scannable expandable rows (`<details class="roster-row">`) when rows have secondary details/forms, or compact single-line table rows (`<div class="roster-row">`) when inline actions must stay immediately accessible.
 - Keep each collapsed `<summary>` row to a single compact, scannable line with primary identity, key badges, and inline summary metrics (for example, `Alchemy (137)`, stock count, or crafter count).
 - Place secondary metadata, progress bars, source breakdowns, recipe lists, and forms inside the expanded row body.

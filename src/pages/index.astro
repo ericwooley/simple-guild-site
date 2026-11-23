@@ -87,29 +87,22 @@ const homeUrl = (overrides: Record<string, number>, hash = '') => {
       </details>
     )}
     {pageNews.length > 0 && (
-      <div class="roster-list" data-sortable-table>
-        <div class="roster-table-header roster-table-news">
-          <button type="button" class="sort-header" data-sort-col="0" data-sort-type="text">Post</button>
-          <button type="button" class="sort-header" data-sort-col="1" data-sort-type="text">Author</button>
-          <button type="button" class="sort-header" data-sort-col="2" data-sort-type="num">Published</button>
-        </div>
+      <div class="news-feed">
         {pageNews.map(item => {
           const excerpt = stripHtmlText(item.html);
           const postUrl = `/news/${encodeURIComponent(item.id)}`;
-          const pubMs = item.publishedAt ? (Date.parse(item.publishedAt) || 0) : 0;
           return (
-            <div class="roster-row news-entry" data-s0={item.title || ''} data-s1={item.authorName || ''} data-s2={String(pubMs)}>
-              <div class="roster-summary roster-summary-table roster-summary-static roster-table-news">
-                <div class="news-entry-main">
-                  <a class="news-link" href={postUrl}><strong>{item.title}</strong></a>
-                  <a class="news-excerpt-link" href={postUrl}>
-                    <p class="news-excerpt">{excerpt}</p>
-                  </a>
-                </div>
-                <span class="roster-cell">{item.authorName}</span>
-                <span class="roster-cell roster-cell-muted"><LocalTime value={item.publishedAt} fallback="Never" /></span>
+            <article class="news-feed-item">
+              <a class="news-link" href={postUrl}><strong>{item.title}</strong></a>
+              {excerpt && (
+                <a class="news-excerpt-link" href={postUrl}>
+                  <p class="news-excerpt">{excerpt}</p>
+                </a>
+              )}
+              <div class="news-entry-footer">
+                <span class="roster-meta">{item.authorName} · <LocalTime value={item.publishedAt} fallback="Never" /></span>
               </div>
-            </div>
+            </article>
           );
         })}
       </div>

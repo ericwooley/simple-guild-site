@@ -220,6 +220,8 @@ button:disabled { opacity: .6; cursor: wait; }
 .rank-form > button { justify-self: start; margin-top: 6px; }
 .stacked-form { display: grid; gap: 16px; }
 .stacked-form > button { justify-self: start; }
+.news-feed { display: grid; gap: 14px; }
+.news-feed-item { padding: 14px 16px; border: 1px solid #493b25; background: #19150f; }
 .news-entry-main { flex: 1 1 auto; min-width: 0; }
 .news-link { color: #f1dfae; text-decoration: none; }
 .news-link:hover { color: #fff1c7; text-decoration: underline; text-decoration-color: #c7a35e88; text-underline-offset: 4px; }

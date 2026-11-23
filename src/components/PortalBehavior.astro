@@ -750,7 +750,11 @@
       }
       const labelEl = banner.querySelector<HTMLElement>('#desktop-update-banner-text');
       const btnEl = banner.querySelector<HTMLButtonElement>('#desktop-update-install-btn');
-      if (labelEl) labelEl.textContent = status.updateInstalling ? 'Installing update…' : `Update available: v${status.latestVersion || 'new'}`;
+      if (labelEl) {
+        if (status.updateInstalling) labelEl.textContent = 'Installing update…';
+        else if (status.updateError) labelEl.textContent = status.updateError;
+        else labelEl.textContent = `Update available: v${status.latestVersion || 'new'}`;
+      }
       if (btnEl) {
         btnEl.disabled = Boolean(status.updateInstalling);
         btnEl.textContent = status.updateInstalling ? 'Updating…' : 'Update now';
