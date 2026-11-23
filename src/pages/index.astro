@@ -25,11 +25,27 @@ const rawNPage = Number(Astro.url.searchParams.get('npage') || '1');
 const newsPage = Number.isSafeInteger(rawNPage) && rawNPage >= 1 ? Math.min(rawNPage, newsTotalPages) : 1;
 const pageNews = news.slice((newsPage - 1) * newsPageSize, newsPage * newsPageSize);
 
+const SYSTEM_MAILERS = new Set([
+  'alliance auction house',
+  'horde auction house',
+  'blackwater auction house',
+  'auction house',
+  'the postmaster',
+]);
+const homeActivity = activityFeed.filter(entry => {
+  if (entry.kind === 'commendation') return true;
+  if (entry.kind === 'donation') {
+    const actor = String(entry.actorName || '').trim().toLowerCase();
+    return Boolean(actor) && !SYSTEM_MAILERS.has(actor);
+  }
+  return false;
+});
+
 const actPageSize = 5;
-const actTotalPages = Math.max(1, Math.ceil(activityFeed.length / actPageSize));
+const actTotalPages = Math.max(1, Math.ceil(homeActivity.length / actPageSize));
 const rawAPage = Number(Astro.url.searchParams.get('apage') || '1');
 const actPage = Number.isSafeInteger(rawAPage) && rawAPage >= 1 ? Math.min(rawAPage, actTotalPages) : 1;
-const pageActivity = activityFeed.slice((actPage - 1) * actPageSize, actPage * actPageSize);
+const pageActivity = homeActivity.slice((actPage - 1) * actPageSize, actPage * actPageSize);
 
 const homeUrl = (overrides: Record<string, number>, hash = '') => {
   const params = new URLSearchParams();
@@ -52,9 +68,9 @@ const homeUrl = (overrides: Record<string, number>, hash = '') => {
     <CommendationForm members={eligibleMembers} compact label="Thank" />
     <div class="activity-feed">
       {pageActivity.map(entry => <ActivityItem entry={entry} />)}
-      {!activityFeed.length && <p class="notice">No activity yet. Thank a guildmate above or sync bank history.</p>}
+      {!homeActivity.length && <p class="notice">No thanks or donations yet. Thank a guildmate above or sync bank donations.</p>}
     </div>
-    <Pagination page={actPage} totalPages={actTotalPages} totalItems={activityFeed.length} pageSize={actPageSize} pageUrl={(p: number) => homeUrl({ apage: p }, '#activity')} label="Guild activity pagination" />
+    <Pagination page={actPage} totalPages={actTotalPages} totalItems={homeActivity.length} pageSize={actPageSize} pageUrl={(p: number) => homeUrl({ apage: p }, '#activity')} label="Guild activity pagination" />
     <a class="text-link" href="/activity">Open full activity feed</a>
   </GuildPanel>
   <div class="guild-col">
