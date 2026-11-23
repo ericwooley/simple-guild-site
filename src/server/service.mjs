@@ -196,6 +196,87 @@ export async function getGuildFeedbackData(request, slugOrId) {
     localTestLogin: localMode(request)
   };
 }
+const AUTO_REFRESH_TTL_MS = 4 * 60 * 60 * 1000;
+const AUTO_REFRESH_ERROR_BACKOFF_MS = 15 * 60 * 1000;
+const guildProfNextCheckAt = new Map();
+const guildProfInFlight = new Set();
+const guildAhNextCheckAt = new Map();
+const guildAhInFlight = new Set();
+
+function maybeScheduleGuildBackgroundRefresh(guild, roster) {
+  if (!guild?.id?.startsWith('bnet:')) return;
+  if (process.env.NODE_ENV === 'test' || process.env.DISABLE_BACKGROUND_REFRESH === '1') return;
+  if (!process.env.BNET_CLIENT_ID || !process.env.BNET_CLIENT_SECRET) return;
+  const now = Date.now();
+
+  if ((roster?.length ?? 0) > 0 && !guildProfInFlight.has(guild.id) && now >= (guildProfNextCheckAt.get(guild.id) ?? 0)) {
+    const firstCheckSinceBoot = !guildProfNextCheckAt.has(guild.id);
+    guildProfInFlight.add(guild.id);
+    guildProfNextCheckAt.set(guild.id, now + AUTO_REFRESH_TTL_MS);
+    void (async () => {
+      try {
+        if (firstCheckSinceBoot) {
+          const row = (await getPool().query(
+            `SELECT max(p.updated_at) AS latest
+             FROM guild_character_professions p
+             JOIN guild_characters c ON c.guild_id = p.guild_id AND c.id = p.character_id
+             WHERE p.guild_id = $1 AND c.account_id IS NULL`,
+            [guild.id]
+          )).rows[0];
+          const latestMs = row?.latest ? new Date(row.latest).getTime() : 0;
+          if (latestMs && (Date.now() - latestMs) < AUTO_REFRESH_TTL_MS) {
+            guildProfNextCheckAt.set(guild.id, latestMs + AUTO_REFRESH_TTL_MS);
+            return;
+          }
+        }
+        const startedAt = new Date();
+        const token = await getBattleNetClientToken();
+        const fetched = await fetchBattleNetGuildProfessions(roster, guild.region, token);
+        const count = await transaction(db => applyBattleNetGuildProfessions(db, guild.id, fetched, startedAt));
+        console.log(`[auto-refresh] Updated professions for ${count} characters in ${guild.name}.`);
+      } catch (err) {
+        console.error(`[auto-refresh] Guild professions refresh failed for ${guild.id}:`, err instanceof Error ? err.message : err);
+        guildProfNextCheckAt.set(guild.id, Date.now() + AUTO_REFRESH_ERROR_BACKOFF_MS);
+      } finally {
+        guildProfInFlight.delete(guild.id);
+      }
+    })();
+  }
+
+  if (!guildAhInFlight.has(guild.id) && now >= (guildAhNextCheckAt.get(guild.id) ?? 0)) {
+    const firstCheckSinceBoot = !guildAhNextCheckAt.has(guild.id);
+    guildAhInFlight.add(guild.id);
+    guildAhNextCheckAt.set(guild.id, now + AUTO_REFRESH_TTL_MS);
+    void (async () => {
+      try {
+        const ahCtx = await resolveGuildAhContext(getPool(), guild);
+        if (firstCheckSinceBoot) {
+          const row = (await getPool().query(
+            `SELECT max(observed_at) AS latest FROM item_ah_prices WHERE region=$1 AND ruleset=$2 AND faction=$3`,
+            [ahCtx.region, ahCtx.ruleset, ahCtx.faction]
+          )).rows[0];
+          const latestMs = row?.latest ? new Date(row.latest).getTime() : 0;
+          if (latestMs && (Date.now() - latestMs) < AUTO_REFRESH_TTL_MS) {
+            guildAhNextCheckAt.set(guild.id, latestMs + AUTO_REFRESH_TTL_MS);
+            return;
+          }
+        }
+        const snap = await fetchForeverAhSnapshot({ ...ahCtx, force: true });
+        if (snap.ok) {
+          console.log(`[auto-refresh] Updated ${snap.itemsPriced} AH prices for ${ahCtx.region}/${ahCtx.ruleset}/${ahCtx.faction}.`);
+        } else {
+          guildAhNextCheckAt.set(guild.id, Date.now() + AUTO_REFRESH_ERROR_BACKOFF_MS);
+        }
+      } catch (err) {
+        console.error(`[auto-refresh] AH snapshot refresh failed for ${guild.id}:`, err instanceof Error ? err.message : err);
+        guildAhNextCheckAt.set(guild.id, Date.now() + AUTO_REFRESH_ERROR_BACKOFF_MS);
+      } finally {
+        guildAhInFlight.delete(guild.id);
+      }
+    })();
+  }
+}
+
 export async function getPortalData(request) {
   const output = {...empty(),localTestLogin:localMode(request),battleNetConfigured:battleNetConfigured()};
   const identity = await getIdentity(request);
@@ -564,6 +645,7 @@ export async function getPortalData(request) {
   output.professions = state.characters.filter(c => c.active !== false).flatMap(char => (char.professions ?? []).map(prof => ({characterId:char.id,characterName:char.name,name:prof.name,rank:prof.rank,maxRank:prof.maxRank,online:Boolean(char.online),zone:char.zone ?? null,titles:char.titles ?? [],updatedAt:prof.updatedAt ?? null,recipes:(prof.recipes ?? []).map(recipe => ({...recipe,recipeKey:`${char.id}:${prof.id}:${recipe.id}`,canEdit:char.accountId === identity.id}))})));
   output.tokens = (await getPool().query(`SELECT id,scope,created_at AS "createdAt",expires_at AS "expiresAt",revoked_at AS "revokedAt",last_used_at AS "lastUsedAt" FROM sync_tokens WHERE account_id=$1 AND guild_id=$2 ORDER BY created_at DESC LIMIT 100`,[identity.id,guild.id])).rows.map(r => Object.fromEntries(Object.entries(r).map(([k,v])=>[k,v instanceof Date?v.toISOString():v])));
   output.syncs = state.syncs.filter(s => access.permissions.manageGuildSync || s.accountId === identity.id).map(({accountId,...s})=>s);
+  maybeScheduleGuildBackgroundRefresh(guild, state.roster);
   return output;
 }
 export async function readJson(request, limit) {
@@ -735,6 +817,7 @@ export async function handleAction(request, address) {
         const access = resolveAccess(acct, acct.testAccount ? guildChars : (acctChars.length ? acctChars : guildChars), state, guild.id);
         need(access.isGuildMaster || access.permissions.manageGuildSync,'Your selected character cannot refresh bank item prices.');
         const result = await refreshGuildTransactionPrices(db, guild.id, guild.region, fetch, prefetchedPrices, ahContext);
+        if (ahSnap.ok) guildAhNextCheckAt.set(guild.id, Date.now() + AUTO_REFRESH_TTL_MS);
         const ahNote = ahSnap.ok ? ` (${result.ahPriced} AH, ${result.vendorPriced} vendor fallback)` : ' (vendor fallback — AH unavailable)';
         return {ok:true,message:`Priced ${result.itemsPriced} items${ahNote} across ${result.transactionsUpdated} bank entries.`};
       });
@@ -755,6 +838,7 @@ export async function handleAction(request, address) {
       const access = resolveAccess(acct, acct.testAccount ? guildChars : (acctChars.length ? acctChars : guildChars), state, guild.id);
       need(access.isGuildMaster || access.permissions.manageGuildSync,'Your selected character cannot refresh guild professions from Battle.net.');
       const count = await applyBattleNetGuildProfessions(db, guild.id, fetchedProfs, profFetchStartedAt);
+      guildProfNextCheckAt.set(guild.id, Date.now() + AUTO_REFRESH_TTL_MS);
       return {ok:true,message:`Refreshed professions for ${count} guild characters from Battle.net.`};
     });
   }
