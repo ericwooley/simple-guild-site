@@ -39,6 +39,8 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
+          build-args: |
+            WEB_RELEASE=${{ github.sha }}
           tags: |
             ghcr.io/${{ github.repository }}:main
             ghcr.io/${{ github.repository }}:${{ github.sha }}

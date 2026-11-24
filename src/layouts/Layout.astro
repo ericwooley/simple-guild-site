@@ -2,6 +2,7 @@
 import Navigation from '../components/Navigation.astro';
 import PortalBehavior from '../components/PortalBehavior.astro';
 import ActionForm from '../components/ActionForm.astro';
+import { webRelease, webReleaseLabel } from '../release';
 import '../styles/vendor/arcane.css';
 import '../styles/site.css';
 const { title = 'Guild hall', account = null, guild = null, characters = [], isGuildMaster = false } = Astro.props;
@@ -25,7 +26,7 @@ Astro.response.headers.set('Referrer-Policy', 'same-origin');
 <title>{title} · {guildName}</title>
 </head><body class="theme-arcane"><a class="skip-link" href="#main">Skip to content</a>
 <Navigation account={account} guild={guild} characters={characters} isGuildMaster={isGuildMaster} /><main id="main" tabindex="-1">{account?.email && !account.emailVerified && (<div class="email-verify-banner" role="status"><p>Your email (<strong>{account.email}</strong>) is not verified yet — guild email notifications are paused until you verify it.</p><ActionForm action="set-notification-email" label="Resend verification email" values={{ email: account.email }} class="inline-action" buttonClass="btn-subtle" /></div>)}<slot /></main>
-<footer class="site-footer"><a href="/">{guildName}</a><span>WoW Forever</span><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="#main">Back to top</a></footer>
+<footer class="site-footer"><a href="/">{guildName}</a><span>WoW Forever</span><span title={webRelease}>Web release {webReleaseLabel}</span><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="#main">Back to top</a></footer>
 <dialog id="desktop-settings-dialog" class="desktop-settings-dialog" aria-labelledby="desktop-settings-title">
   <form id="desktop-settings-form" class="stacked-form">
     <div class="card-heading">
@@ -46,7 +47,7 @@ Astro.response.headers.set('Referrer-Policy', 'same-origin');
   <hr style="border:0;border-top:1px solid #4d3f25;margin:16px 0;" />
   <div class="stacked-form">
     <div class="card-heading">
-      <span>Version <strong id="setting-app-version">0.1.0</strong></span>
+      <span>Sync app version <strong id="setting-app-version">Loading…</strong></span>
       <span id="setting-update-status" class="roster-meta" role="status" aria-live="polite"></span>
     </div>
     <div class="row-actions">

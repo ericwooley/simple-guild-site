@@ -33,6 +33,9 @@ Battle.net login currently establishes account identity only. Live character and
 Explicit local fixture accounts support initial human tests. Production rejects those accounts and their tokens.
 
 Execute `pnpm build` to package downloads and create the Node server in `dist/`.
+The website footer and `X-Web-Release` response header show the build's Git commit ID.
+The image workflow embeds this ID at build time. Local builds show `dev` unless you set `PUBLIC_WEB_RELEASE`.
+The desktop app shows its separate release version in Desktop Settings.
 Execute `TEST_BASE_URL=http://localhost:4321 pnpm test` to check logic, authentication, provenance, and live website routes.
 Execute `pnpm test:db` to check database workflows in a temporary schema.
 Execute `pnpm test:e2e` to check browser workflows against the running local test website.
