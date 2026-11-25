@@ -367,21 +367,32 @@ test.describe.serial('Full E2E Guild Flow (Mock Battle.net + Real Postgres + Rea
     await expect(gmPage).toHaveURL(/\/news\//);
     await expect(gmPage.locator('.news-article-body a[href="https://example.com/guide"]')).toHaveText('Raid Guide');
 
-    // Sync history on /account renders as a sortable table, and personal review link button is present
+    // Home page hero has prominent "Copy my review link" button with short /fb/<id> URL
+    await gmPage.goto(`${BASE_URL}/`);
+    const heroReviewBtn = gmPage.locator('.hero-actions button[data-copy-text*="/fb/"]');
+    await expect(heroReviewBtn).toBeVisible();
+
+    // Sync history on /account renders as a sortable table, and personal review link button uses /fb/<id>
     await gmPage.goto(`${BASE_URL}/account`);
     await expect(gmPage.locator('#sync-history .roster-list[data-sortable-table]')).toBeVisible();
-    await expect(gmPage.locator('button[data-copy-text*="/e2e-test-guild/feedback?for="]').first()).toBeVisible();
+    await expect(gmPage.locator('button[data-copy-text*="/fb/"]').first()).toBeVisible();
 
-    // External stranger visits /e2e-test-guild/feedback?for=Lyra%20Crafter (unauthenticated sees no guild member names)
+    // Grab Member's short /fb/<id> link from /account
+    await memberPage.goto(`${BASE_URL}/account`);
+    const memberReviewUrl = await memberPage.locator('button[data-copy-text*="/fb/"]').first().getAttribute('data-copy-text');
+    expect(memberReviewUrl).toMatch(/\/fb\/[^/]+$/);
+
+    // External stranger visits short /fb/<id> link (redirects to /e2e-test-guild/feedback?for=<id>, unauthenticated sees no guild member names)
     const outsiderCtx = await browser.newContext();
     const unauthPage = await outsiderCtx.newPage();
-    await unauthPage.goto(`${BASE_URL}/e2e-test-guild/feedback?for=Lyra%20Crafter`);
+    await unauthPage.goto(memberReviewUrl);
+    await expect(unauthPage).toHaveURL(/\/e2e-test-guild\/feedback\?for=/);
     await expect(unauthPage.getByText('Lyra Crafter')).toHaveCount(0);
     await unauthPage.close();
 
-    // Outsider signs in through Battle.net -> returns to /e2e-test-guild/feedback?for=Lyra%20Crafter with Lyra Crafter pre-selected
-    const outsiderPage = await signInAs(outsiderCtx, 'outsider', { startUrl: `${BASE_URL}/e2e-test-guild/feedback?for=Lyra%20Crafter` });
-    await expect(outsiderPage).toHaveURL(/\/e2e-test-guild\/feedback\?for=Lyra(%20|\+)Crafter$/);
+    // Outsider signs in through Battle.net -> returns to /e2e-test-guild/feedback?for=<id> with Lyra Crafter pre-selected
+    const outsiderPage = await signInAs(outsiderCtx, 'outsider', { startUrl: memberReviewUrl });
+    await expect(outsiderPage).toHaveURL(/\/e2e-test-guild\/feedback\?for=/);
     await expect(outsiderPage.locator('[data-picker-chips] .member-chip', { hasText: 'Lyra Crafter' })).toBeVisible();
 
     // Outsider submits a thank-you note for pre-selected Lyra Crafter without searching

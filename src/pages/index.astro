@@ -9,9 +9,16 @@ import ActivityItem from '../components/ActivityItem.astro';
 import Pagination from '../components/Pagination.astro';
 import { getPortalData } from '../server/service.mjs';
 import { stripHtmlText } from '../server/sanitizeHtml.mjs';
+import { buildShortFeedbackUrl } from '../server/feedbackLinks.mjs';
 const data = await getPortalData(Astro.request);
 const { account, guild, characters, roster, activityFeed, isGuildMaster, permissions, motd, guildInfo, news, macros } = data;
 const guildName = guild?.name || 'Band of the Helping Hand';
+const siteOrigin = (process.env.APP_ORIGIN || Astro.url.origin).replace(/\/+$/, '');
+const primaryCharForReview = (account?.guildCharacters ?? []).find(gc => gc.id === account?.primaryCharacterId)
+  ?? characters.find(c => c.isMain && c.verified && c.guildRank)
+  ?? (account?.guildCharacters ?? [])[0]
+  ?? null;
+const primaryReviewLink = guild && primaryCharForReview ? buildShortFeedbackUrl(siteOrigin, primaryCharForReview.id) : '';
 const ownIds = new Set(characters.map(c => c.id));
 const ownNames = new Set(characters.map(c => c.name.trim().toLowerCase()));
 const eligibleMembers = roster
@@ -58,7 +65,7 @@ const homeUrl = (overrides: Record<string, number>, hash = '') => {
 ---
 <Layout account={account} guild={guild} characters={characters} isGuildMaster={isGuildMaster}>
 <section class="hero" aria-labelledby="guild-title"><img class="hero-landscape" src="/guild-landscape.svg" alt="" width="1440" height="600" fetchpriority="high" /><div class="hero-shade" aria-hidden="true"></div>
-<div class="hero-content"><h1 id="guild-title" class="arcane-title">{guildName}</h1>{!account && <div class="hero-actions"><a href="/login" class="arcane-btn">Sign in</a></div>}</div>
+<div class="hero-content"><h1 id="guild-title" class="arcane-title">{guildName}</h1>{!account ? <div class="hero-actions"><a href="/login" class="arcane-btn">Sign in</a></div> : primaryReviewLink && <div class="hero-actions"><button type="button" class="arcane-btn" data-copy-text={primaryReviewLink}>Copy my review link</button></div>}</div>
 <div class="hero-standard" aria-hidden="true"><div class="standard-ring"></div><GuildCrest large logoUrl={guild?.logoUrl} logoName={guild?.logoName} /></div>
 <span class="hero-corner top-left" aria-hidden="true"></span><span class="hero-corner top-right" aria-hidden="true"></span><span class="hero-corner bottom-left" aria-hidden="true"></span><span class="hero-corner bottom-right" aria-hidden="true"></span></section>
 {account ? <>

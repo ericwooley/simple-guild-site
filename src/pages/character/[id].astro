@@ -7,6 +7,7 @@ import LocalTime from '../../components/LocalTime.astro';
 import ActivityItem from '../../components/ActivityItem.astro';
 import Pagination from '../../components/Pagination.astro';
 import { getPortalData } from '../../server/service.mjs';
+import { buildShortFeedbackUrl } from '../../server/feedbackLinks.mjs';
 import { reputationStanding } from '../../server/reputation.mjs';
 import { professionCap } from '../../server/professionSlots.mjs';
 import { levelQualityClass, professionQualityClass, rankQualityClass } from '../../server/rarity.mjs';
@@ -90,9 +91,8 @@ const suggestedTitles = profile
   ? [...new Set(profile.professions.map(p => titleForProfession[p.name] ?? `Guild ${p.name}`))]
   : [];
 const siteOrigin = (process.env.APP_ORIGIN || Astro.url.origin).replace(/\/+$/, '');
-const guildSlug = guild?.id ? (guild.id.startsWith('bnet:') ? guild.id.split(':').slice(2).join(':') : guild.id) : '';
-const profileReviewLink = profile && guildSlug
-  ? `${siteOrigin}/${encodeURIComponent(guildSlug)}/feedback?for=${encodeURIComponent(profile.name)}`
+const profileReviewLink = profile && guild
+  ? buildShortFeedbackUrl(siteOrigin, profile.id)
   : '';
 ---
 <Layout title={profile ? profile.name : 'Character profile'} account={account} guild={guild} characters={characters} isGuildMaster={isGuildMaster}>

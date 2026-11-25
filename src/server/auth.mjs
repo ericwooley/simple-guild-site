@@ -29,7 +29,13 @@ export function requireOrigin(request) {
   }
 }
 export function cookies(request) {
-  return Object.fromEntries((request.headers.get('cookie') ?? '').split(';').map(v => v.trim().split('=')));
+  const out = {};
+  for (const part of (request.headers.get('cookie') ?? '').split(';')) {
+    const trimmed = part.trim();
+    const idx = trimmed.indexOf('=');
+    if (idx > 0) out[trimmed.slice(0, idx)] = trimmed.slice(idx + 1);
+  }
+  return out;
 }
 const SESSION_TTL_SECONDS = 30 * 86400;
 const SESSION_RENEW_THRESHOLD_MS = 15 * 86400 * 1000;

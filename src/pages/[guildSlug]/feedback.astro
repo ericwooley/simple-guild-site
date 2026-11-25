@@ -4,6 +4,7 @@ import GuildPanel from '../../components/GuildPanel.astro';
 import CommendationForm from '../../components/CommendationForm.astro';
 import ActionForm from '../../components/ActionForm.astro';
 import { getGuildFeedbackData } from '../../server/service.mjs';
+import { matchesFeedbackTarget } from '../../server/feedbackLinks.mjs';
 
 const guildSlug = Astro.params.guildSlug || '';
 const forParam = (Astro.url.searchParams.get('for') || '').trim().slice(0, 120);
@@ -11,7 +12,7 @@ const { guild, account, ownCharacters, members, battleNetConfigured, localTestLo
 const baseReturnUrl = guild ? `/${encodeURIComponent(guild.slug)}/feedback` : '/';
 const returnUrl = guild && forParam ? `${baseReturnUrl}?for=${encodeURIComponent(forParam)}` : baseReturnUrl;
 const preselectedMember = account && forParam
-  ? members.find(m => m.id === forParam || m.name.trim().toLowerCase() === forParam.toLowerCase()) ?? null
+  ? members.find(m => matchesFeedbackTarget(m, forParam)) ?? null
   : null;
 ---
 <Layout title={guild ? `Thank ${guild.name}` : 'Guild feedback'} account={null} guild={guild} characters={[]} isGuildMaster={false}>
