@@ -8,14 +8,14 @@ import { matchesFeedbackTarget } from '../../server/feedbackLinks.mjs';
 
 const guildSlug = Astro.params.guildSlug || '';
 const forParam = (Astro.url.searchParams.get('for') || '').trim().slice(0, 120);
-const { guild, account, ownCharacters, members, battleNetConfigured, localTestLogin } = await getGuildFeedbackData(Astro.request, guildSlug);
+const { guild, account, ownCharacters, members, isGuildMaster, battleNetConfigured, localTestLogin } = await getGuildFeedbackData(Astro.request, guildSlug);
 const baseReturnUrl = guild ? `/${encodeURIComponent(guild.slug)}/feedback` : '/';
 const returnUrl = guild && forParam ? `${baseReturnUrl}?for=${encodeURIComponent(forParam)}` : baseReturnUrl;
 const preselectedMember = account && forParam
   ? members.find(m => matchesFeedbackTarget(m, forParam)) ?? null
   : null;
 ---
-<Layout title={guild ? `Thank ${guild.name}` : 'Guild feedback'} account={null} guild={guild} characters={[]} isGuildMaster={false}>
+<Layout title={guild ? `Thank ${guild.name}` : 'Guild feedback'} account={account} guild={guild} characters={ownCharacters} isGuildMaster={isGuildMaster}>
   <div class="page-heading">
     <h1>{guild ? guild.name : 'Guild not found'}</h1>
     {account && <ActionForm action="logout" label="Sign out" class="inline-action" buttonClass="btn-subtle" />}

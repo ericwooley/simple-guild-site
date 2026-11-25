@@ -7,7 +7,8 @@ import LocalTime from '../../components/LocalTime.astro';
 import ActivityItem from '../../components/ActivityItem.astro';
 import Pagination from '../../components/Pagination.astro';
 import { getPortalData } from '../../server/service.mjs';
-import { buildShortFeedbackUrl } from '../../server/feedbackLinks.mjs';
+import { getPool } from '../../server/db.mjs';
+import { buildShortFeedbackUrl, loadCachedFeedbackShortUrls } from '../../server/feedbackLinks.mjs';
 import { reputationStanding } from '../../server/reputation.mjs';
 import { professionCap } from '../../server/professionSlots.mjs';
 import { levelQualityClass, professionQualityClass, rankQualityClass } from '../../server/rarity.mjs';
@@ -91,15 +92,19 @@ const suggestedTitles = profile
   ? [...new Set(profile.professions.map(p => titleForProfession[p.name] ?? `Guild ${p.name}`))]
   : [];
 const siteOrigin = (process.env.APP_ORIGIN || Astro.url.origin).replace(/\/+$/, '');
+const cachedShortLinks = profile && guild
+  ? await loadCachedFeedbackShortUrls(getPool(), siteOrigin, [profile.id])
+  : new Map();
+const profileCachedShortUrl = profile ? (cachedShortLinks.get(profile.id) ?? '') : '';
 const profileReviewLink = profile && guild
-  ? buildShortFeedbackUrl(siteOrigin, profile.id)
+  ? (profileCachedShortUrl || buildShortFeedbackUrl(siteOrigin, profile.id))
   : '';
 ---
 <Layout title={profile ? profile.name : 'Character profile'} account={account} guild={guild} characters={characters} isGuildMaster={isGuildMaster}>
   <div class="page-heading">
     <h1>{profile ? profile.name : 'Character profile'}</h1>
     <div class="row-actions">
-      {account && profileReviewLink && <button type="button" class="btn-subtle" data-copy-text={profileReviewLink}>Copy review link</button>}
+      {account && profileReviewLink && <button type="button" class="btn-subtle" data-copy-text={profileReviewLink} data-short-review-character={!profileCachedShortUrl && profile ? profile.id : undefined}>Copy review link</button>}
       <a class="text-link" href="/roster">Back to roster</a>
     </div>
   </div>

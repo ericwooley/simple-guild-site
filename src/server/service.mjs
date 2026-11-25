@@ -22,6 +22,7 @@ import { percentileQualityClass } from './rarity.mjs';
 import { loadAccountCharacterProfessions, loadGuildState, saveGuildState } from './guildStore.mjs';
 import { sanitizeNewsHtml, stripHtmlText } from './sanitizeHtml.mjs';
 import { fetchForeverAhSnapshot, formatCopper, importBankTransactions, loadAhPriceMap, lookupMissingVendorPrices, prefetchVendorPrices, refreshGuildTransactionPrices, resolveGuildAhContext, saveFetchedCatalogItems } from './itemPrices.mjs';
+import { getOrCreateFeedbackShortUrl } from './feedbackLinks.mjs';
 const empty = () => ({account:null,guild:null,characters:[],roster:[],bank:[],bankTransactions:[],guildBankHistory:[],bankContributions:[],requests:[],professions:[],tokens:[],syncs:[],commendations:[],activityFeed:[],isGuildMaster:false,permissions:{approveBankRequests:false,assignTitles:false,manageGuildSync:false,manageAnnouncements:false},ranks:[],motd:null,guildInfo:null,news:[],macros:[],designatedBanks:[]});
 const ALL_PERMISSIONS = {approveBankRequests:true,assignTitles:true,manageGuildSync:true,manageAnnouncements:true};
 const NO_PERMISSIONS = {approveBankRequests:false,assignTitles:false,manageGuildSync:false,manageAnnouncements:false};
@@ -162,27 +163,57 @@ export async function getGuildNewsItem(guildId, newsId) {
 export async function getGuildFeedbackData(request, slugOrId) {
   const guildRow = await findGuildBySlugOrId(getPool(), slugOrId);
   if (!guildRow) {
-    return { guild: null, account: null, ownCharacters: [], members: [], battleNetConfigured: battleNetConfigured(), localTestLogin: localMode(request) };
+    return { guild: null, account: null, ownCharacters: [], members: [], isGuildMaster: false, battleNetConfigured: battleNetConfigured(), localTestLogin: localMode(request) };
   }
   const guild = { ...guildSummary(guildRow), slug: guildSlugFromRow(guildRow) };
   const identity = await getIdentity(request);
   if (!identity) {
-    return { guild, account: null, ownCharacters: [], members: [], battleNetConfigured: battleNetConfigured(), localTestLogin: localMode(request) };
+    return { guild, account: null, ownCharacters: [], members: [], isGuildMaster: false, battleNetConfigured: battleNetConfigured(), localTestLogin: localMode(request) };
   }
-  const ownCharsRows = (await getPool().query(
-    `SELECT id, name, realm, level, class_name AS "className", is_main AS "isMain", verified FROM account_characters WHERE account_id=$1 AND verified=true ORDER BY is_main DESC, level DESC NULLS LAST, name ASC`,
-    [identity.id]
-  )).rows;
+  const db = getPool();
+  const [ownCharsRes, notifRes, unreadRes, gmRes, rosterRes] = await Promise.all([
+    db.query(
+      `SELECT id, name, realm, level, class_name AS "className", is_main AS "isMain", verified, guild_slug AS "guildSlug", guild_rank_index AS "guildRankIndex"
+       FROM account_characters
+       WHERE account_id=$1 AND verified=true
+       ORDER BY is_main DESC, level DESC NULLS LAST, name ASC`,
+      [identity.id]
+    ),
+    db.query(
+      `SELECT id, title, body, link, read_at AS "readAt", created_at AS "createdAt"
+       FROM account_notifications
+       WHERE account_id=$1
+       ORDER BY created_at DESC LIMIT 30`,
+      [identity.id]
+    ),
+    db.query(
+      `SELECT count(*)::int AS count FROM account_notifications WHERE account_id=$1 AND read_at IS NULL`,
+      [identity.id]
+    ),
+    db.query(
+      `SELECT role FROM memberships WHERE account_id=$1 AND guild_id=$2 AND active=true LIMIT 1`,
+      [identity.id, guildRow.id]
+    ),
+    db.query(
+      `SELECT id, name FROM guild_roster_members WHERE guild_id=$1
+       UNION
+       SELECT id, name FROM guild_characters WHERE guild_id=$1 AND active=true`,
+      [guildRow.id]
+    ),
+  ]);
+  const ownCharsRows = ownCharsRes.rows;
+  const notifRows = notifRes.rows.map(n => ({
+    ...n,
+    readAt: n.readAt instanceof Date ? n.readAt.toISOString() : (n.readAt ?? null),
+    createdAt: n.createdAt instanceof Date ? n.createdAt.toISOString() : n.createdAt,
+  }));
+  const unreadNotificationCount = unreadRes.rows[0]?.count ?? 0;
+  const isGuildMaster = gmRes.rows[0]?.role === 'owner'
+    || ownCharsRows.some(c => c.guildSlug === guild.slug && Number(c.guildRankIndex) === 0);
   const ownIds = new Set(ownCharsRows.map(c => c.id));
   const ownNames = new Set(ownCharsRows.map(c => normalize(c.name)));
-  const rosterRows = (await getPool().query(
-    `SELECT id, name FROM guild_roster_members WHERE guild_id=$1
-     UNION
-     SELECT id, name FROM guild_characters WHERE guild_id=$1 AND active=true`,
-    [guildRow.id]
-  )).rows;
   const byNorm = new Map();
-  for (const r of rosterRows) {
+  for (const r of rosterRes.rows) {
     const n = normalize(r.name);
     if (!n || ownIds.has(r.id) || ownNames.has(n)) continue;
     if (!byNorm.has(n)) byNorm.set(n, { id: r.id, name: r.name, rank: '', level: null });
@@ -190,9 +221,16 @@ export async function getGuildFeedbackData(request, slugOrId) {
   const members = [...byNorm.values()].sort((a, b) => a.name.localeCompare(b.name));
   return {
     guild,
-    account: { id: identity.id, battleTag: identity.battleTag, testAccount: identity.testAccount },
+    account: {
+      id: identity.id,
+      battleTag: identity.battleTag,
+      testAccount: identity.testAccount,
+      notifications: notifRows,
+      unreadNotificationCount,
+    },
     ownCharacters: ownCharsRows,
     members,
+    isGuildMaster,
     battleNetConfigured: battleNetConfigured(),
     localTestLogin: localMode(request)
   };
@@ -732,6 +770,25 @@ export async function handleAction(request, address) {
     });
   }
   const origin = process.env.APP_ORIGIN || new URL(request.url).origin;
+  if (body.action === 'shorten-review-link') {
+    const db = getPool();
+    const acct = await getIdentity(request, db);
+    need(acct, 'Sign in before using this action.', 401);
+    const characterId = typeof body.characterId === 'string' ? body.characterId.trim() : '';
+    need(characterId.length > 0 && characterId.length <= 120, 'Choose a valid character.', 400);
+    const exists = (await db.query(
+      `SELECT 1 FROM guild_characters WHERE id=$1 AND active=true
+       UNION ALL
+       SELECT 1 FROM guild_roster_members WHERE id=$1
+       UNION ALL
+       SELECT 1 FROM account_characters WHERE id=$1 AND verified=true
+       LIMIT 1`,
+      [characterId]
+    )).rowCount > 0;
+    need(exists, 'Character not found.', 404);
+    const result = await getOrCreateFeedbackShortUrl(db, { origin, characterId });
+    return { ok: true, ...result };
+  }
   // Reserve email cooldown in its own short transaction BEFORE calling SMTP so failed/timed-out deliveries cannot bypass rate limits.
   if (body.action === 'set-notification-email') {
     const rawEmail = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';

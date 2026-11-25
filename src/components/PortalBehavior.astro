@@ -183,30 +183,92 @@
       if (menu.open && !menu.contains(event.target as Node)) menu.open = false;
     });
   });
+  const copyTextToClipboard = async (text: string) => {
+    let copied = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      }
+    } catch {}
+    if (!copied) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { copied = document.execCommand('copy'); } catch {}
+      ta.remove();
+    }
+    return copied;
+  };
   document.querySelectorAll<HTMLButtonElement>('[data-copy-text]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const text = btn.dataset.copyText || '';
-      if (!text) return;
+      if (btn.dataset.copyBusy === '1') return;
+      const fallbackText = btn.dataset.copyText || '';
+      const shortCharId = btn.dataset.shortReviewCharacter || '';
+      if (!fallbackText && !shortCharId) return;
+      const prev = btn.dataset.copyLabel || btn.textContent || 'Copy';
+      btn.dataset.copyLabel = prev;
+
+      if (!shortCharId) {
+        const copied = await copyTextToClipboard(fallbackText);
+        btn.textContent = copied ? 'Copied!' : 'Copy failed';
+        setTimeout(() => { btn.textContent = prev; }, 1800);
+        return;
+      }
+
+      btn.dataset.copyBusy = '1';
+      btn.disabled = true;
+      btn.textContent = 'Shortening…';
+
+      const resolveUrl = async (): Promise<string> => {
+        try {
+          const result = await apiRequest(
+            '/api/actions',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'shorten-review-link', characterId: shortCharId }),
+            },
+            { silent: true }
+          );
+          if (result && typeof result.url === 'string' && result.url) {
+            btn.dataset.copyText = result.url;
+            if (result.shortened) delete btn.dataset.shortReviewCharacter;
+            return result.url;
+          }
+        } catch {}
+        return fallbackText;
+      };
+
       let copied = false;
       try {
-        if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(text);
-          copied = true;
+        if (typeof ClipboardItem !== 'undefined' && typeof navigator.clipboard?.write === 'function') {
+          const urlPromise = resolveUrl();
+          try {
+            await navigator.clipboard.write([
+              new ClipboardItem({
+                'text/plain': urlPromise.then((u) => new Blob([u], { type: 'text/plain' })),
+              }),
+            ]);
+            copied = true;
+          } catch {
+            const finalUrl = await urlPromise;
+            copied = await copyTextToClipboard(finalUrl);
+          }
+        } else {
+          const finalUrl = await resolveUrl();
+          copied = await copyTextToClipboard(finalUrl);
         }
-      } catch {}
-      if (!copied) {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        try { copied = document.execCommand('copy'); } catch {}
-        ta.remove();
+      } finally {
+        delete btn.dataset.copyBusy;
+        btn.disabled = false;
       }
-      const prev = btn.textContent || 'Copy';
-      btn.textContent = copied ? 'Copied!' : 'Copy failed';
-      setTimeout(() => { btn.textContent = prev; }, 1800);
+
+      btn.textContent = copied ? 'Copied!' : 'Link ready — click to copy';
+      setTimeout(() => { btn.textContent = prev; }, 2200);
     });
   });
   document.querySelectorAll<HTMLButtonElement>('[data-fav-toggle]').forEach((btn) => {
