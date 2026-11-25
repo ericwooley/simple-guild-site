@@ -89,11 +89,19 @@ const titleForProfession: Record<string, string> = {
 const suggestedTitles = profile
   ? [...new Set(profile.professions.map(p => titleForProfession[p.name] ?? `Guild ${p.name}`))]
   : [];
+const siteOrigin = (process.env.APP_ORIGIN || Astro.url.origin).replace(/\/+$/, '');
+const guildSlug = guild?.id ? (guild.id.startsWith('bnet:') ? guild.id.split(':').slice(2).join(':') : guild.id) : '';
+const profileReviewLink = profile && guildSlug
+  ? `${siteOrigin}/${encodeURIComponent(guildSlug)}/feedback?for=${encodeURIComponent(profile.name)}`
+  : '';
 ---
 <Layout title={profile ? profile.name : 'Character profile'} account={account} guild={guild} characters={characters} isGuildMaster={isGuildMaster}>
   <div class="page-heading">
     <h1>{profile ? profile.name : 'Character profile'}</h1>
-    <a class="text-link" href="/roster">Back to roster</a>
+    <div class="row-actions">
+      {account && profileReviewLink && <button type="button" class="btn-subtle" data-copy-text={profileReviewLink}>Copy review link</button>}
+      <a class="text-link" href="/roster">Back to roster</a>
+    </div>
   </div>
   {!account ? <SignInGate /> : !profile ? (
     <GuildPanel id="character-missing" title="Character not found" icon="users">

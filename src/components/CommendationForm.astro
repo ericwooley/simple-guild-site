@@ -6,13 +6,14 @@ const {
   label = 'Post to activity feed',
   action = 'add-commendation',
   values = {},
+  initialSelectedIds = [],
   placeholder = 'Type a guildmate’s name to thank…'
 } = Astro.props;
 ---
 {members.length > 0 && (
   <ActionForm action={action} values={values} label={label} class={`activity-form${compact ? ' activity-form-compact' : ''}`}>
     <slot />
-    <div class="member-picker" data-member-picker>
+    <div class="member-picker" data-member-picker data-picker-initial={initialSelectedIds.length ? JSON.stringify(initialSelectedIds) : undefined}>
       {!compact && <span class="wysiwyg-label">Guild members</span>}
       <div class="member-picker-box">
         <div class="member-chips" data-picker-chips></div>

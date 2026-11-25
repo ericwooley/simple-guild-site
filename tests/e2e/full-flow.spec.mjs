@@ -367,24 +367,24 @@ test.describe.serial('Full E2E Guild Flow (Mock Battle.net + Real Postgres + Rea
     await expect(gmPage).toHaveURL(/\/news\//);
     await expect(gmPage.locator('.news-article-body a[href="https://example.com/guide"]')).toHaveText('Raid Guide');
 
-    // Sync history on /account renders as a sortable table
+    // Sync history on /account renders as a sortable table, and personal review link button is present
     await gmPage.goto(`${BASE_URL}/account`);
     await expect(gmPage.locator('#sync-history .roster-list[data-sortable-table]')).toBeVisible();
+    await expect(gmPage.locator('button[data-copy-text*="/e2e-test-guild/feedback?for="]').first()).toBeVisible();
 
-    // External stranger visits /e2e-test-guild/feedback (unauthenticated sees no guild member names)
+    // External stranger visits /e2e-test-guild/feedback?for=Lyra%20Crafter (unauthenticated sees no guild member names)
     const outsiderCtx = await browser.newContext();
     const unauthPage = await outsiderCtx.newPage();
-    await unauthPage.goto(`${BASE_URL}/e2e-test-guild/feedback`);
+    await unauthPage.goto(`${BASE_URL}/e2e-test-guild/feedback?for=Lyra%20Crafter`);
     await expect(unauthPage.getByText('Lyra Crafter')).toHaveCount(0);
     await unauthPage.close();
 
-    // Outsider signs in through Battle.net -> returns to /e2e-test-guild/feedback
-    const outsiderPage = await signInAs(outsiderCtx, 'outsider', { startUrl: `${BASE_URL}/e2e-test-guild/feedback` });
-    await expect(outsiderPage).toHaveURL(/\/e2e-test-guild\/feedback$/);
+    // Outsider signs in through Battle.net -> returns to /e2e-test-guild/feedback?for=Lyra%20Crafter with Lyra Crafter pre-selected
+    const outsiderPage = await signInAs(outsiderCtx, 'outsider', { startUrl: `${BASE_URL}/e2e-test-guild/feedback?for=Lyra%20Crafter` });
+    await expect(outsiderPage).toHaveURL(/\/e2e-test-guild\/feedback\?for=Lyra(%20|\+)Crafter$/);
+    await expect(outsiderPage.locator('[data-picker-chips] .member-chip', { hasText: 'Lyra Crafter' })).toBeVisible();
 
-    // Outsider submits a thank-you note for Lyra Crafter
-    await outsiderPage.locator('[data-picker-input]').fill('Lyra Crafter');
-    await outsiderPage.locator('[data-picker-list] button', { hasText: 'Lyra Crafter' }).click();
+    // Outsider submits a thank-you note for pre-selected Lyra Crafter without searching
     await outsiderPage.locator('textarea[name="message"]').fill('Crafted me a bag in Orgrimmar!');
     await Promise.all([
       outsiderPage.waitForNavigation({ waitUntil: 'networkidle' }),

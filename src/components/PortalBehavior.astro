@@ -405,6 +405,19 @@
       input.placeholder = selected.size ? 'Add another guildmate…' : 'Type a guildmate’s name to add…';
     };
 
+    if (root.dataset.pickerInitial) {
+      try {
+        const initialIds: unknown = JSON.parse(root.dataset.pickerInitial);
+        if (Array.isArray(initialIds)) {
+          for (const id of initialIds) {
+            const match = members.find((m) => m.id === String(id));
+            if (match) selected.set(match.id, match);
+          }
+          if (selected.size) renderSelected();
+        }
+      } catch {}
+    }
+
     const getMatches = () => {
       const q = input.value.trim().toLowerCase();
       return members

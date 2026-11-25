@@ -6,8 +6,13 @@ import ActionForm from '../../components/ActionForm.astro';
 import { getGuildFeedbackData } from '../../server/service.mjs';
 
 const guildSlug = Astro.params.guildSlug || '';
+const forParam = (Astro.url.searchParams.get('for') || '').trim().slice(0, 120);
 const { guild, account, ownCharacters, members, battleNetConfigured, localTestLogin } = await getGuildFeedbackData(Astro.request, guildSlug);
-const returnUrl = guild ? `/${encodeURIComponent(guild.slug)}/feedback` : '/';
+const baseReturnUrl = guild ? `/${encodeURIComponent(guild.slug)}/feedback` : '/';
+const returnUrl = guild && forParam ? `${baseReturnUrl}?for=${encodeURIComponent(forParam)}` : baseReturnUrl;
+const preselectedMember = account && forParam
+  ? members.find(m => m.id === forParam || m.name.trim().toLowerCase() === forParam.toLowerCase()) ?? null
+  : null;
 ---
 <Layout title={guild ? `Thank ${guild.name}` : 'Guild feedback'} account={null} guild={guild} characters={[]} isGuildMaster={false}>
   <div class="page-heading">
@@ -39,12 +44,13 @@ const returnUrl = guild ? `/${encodeURIComponent(guild.slug)}/feedback` : '/';
     </GuildPanel>
   ) : (
     <GuildPanel id="feedback-form" title="Report a helping hand" icon="users">
-      <p class="notice">Signed in as <strong>{account.battleTag}</strong>. Your note will appear in {guild.name}’s activity feed and award reputation to the member you thank.</p>
+      <p class="notice">Signed in as <strong>{account.battleTag}</strong>.{preselectedMember ? <> Leaving a thank-you note for <strong>{preselectedMember.name}</strong> in {guild.name}.</> : <> Your note will appear in {guild.name}’s activity feed and award reputation to the member you thank.</>}</p>
       {members.length > 0 ? (
         <CommendationForm
           action="add-external-commendation"
           values={{ guildId: guild.id }}
           members={members}
+          initialSelectedIds={preselectedMember ? [preselectedMember.id] : []}
           label="Send thank-you note"
           placeholder="Type the guild member’s name who helped you…"
         >
