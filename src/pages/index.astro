@@ -10,7 +10,7 @@ import Pagination from '../components/Pagination.astro';
 import { getPortalData } from '../server/service.mjs';
 import { getPool } from '../server/db.mjs';
 import { stripHtmlText } from '../server/sanitizeHtml.mjs';
-import { buildShortFeedbackUrl, loadCachedFeedbackShortUrls } from '../server/feedbackLinks.mjs';
+import { buildReviewMacro, buildShortFeedbackUrl, loadCachedFeedbackShortUrls } from '../server/feedbackLinks.mjs';
 const data = await getPortalData(Astro.request);
 const { account, guild, characters, roster, activityFeed, isGuildMaster, permissions, motd, guildInfo, news, macros } = data;
 const guildName = guild?.name || 'Band of the Helping Hand';
@@ -24,6 +24,15 @@ const cachedShortLinks = guild && primaryCharForReview
   : new Map();
 const primaryCachedShortUrl = primaryCharForReview ? (cachedShortLinks.get(primaryCharForReview.id) ?? '') : '';
 const primaryReviewLink = guild && primaryCharForReview ? (primaryCachedShortUrl || buildShortFeedbackUrl(siteOrigin, primaryCharForReview.id)) : '';
+const personalReviewMacro = primaryReviewLink
+  ? {
+      title: 'Ask for a helping-hand review',
+      body: buildReviewMacro(guildName, primaryReviewLink),
+      template: buildReviewMacro(guildName, '{{URL}}'),
+      characterId: !primaryCachedShortUrl && primaryCharForReview ? primaryCharForReview.id : undefined,
+    }
+  : null;
+const totalMacroCount = macros.length + (personalReviewMacro ? 1 : 0);
 const ownIds = new Set(characters.map(c => c.id));
 const ownNames = new Set(characters.map(c => c.name.trim().toLowerCase()));
 const eligibleMembers = roster
@@ -86,13 +95,28 @@ const homeUrl = (overrides: Record<string, number>, hash = '') => {
     <a class="text-link" href="/activity">Open full activity feed</a>
   </GuildPanel>
   <div class="guild-col">
-    {macros.length > 0 && (
+    {totalMacroCount > 0 && (
       <details class="column-picker macro-drawer" id="guild-macros">
         <summary class="column-picker-summary">
           <span class="column-picker-label">Guild macros</span>
-          <span class="badge">{macros.length}</span>
+          <span class="badge">{totalMacroCount}</span>
         </summary>
         <div class="macro-list">
+          {personalReviewMacro && (
+            <article class="macro-item" data-personal-review-macro>
+              <div class="macro-item-header">
+                <strong>{personalReviewMacro.title}</strong>
+                <button
+                  type="button"
+                  class="btn-subtle"
+                  data-copy-text={personalReviewMacro.body}
+                  data-copy-template={personalReviewMacro.template}
+                  data-short-review-character={personalReviewMacro.characterId}
+                >Copy</button>
+              </div>
+              <pre class="macro-code">{personalReviewMacro.body}</pre>
+            </article>
+          )}
           {macros.map(macro => (
             <article class="macro-item">
               <div class="macro-item-header">

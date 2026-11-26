@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildReviewMacro,
   buildShortFeedbackUrl,
   feedbackShortId,
   getOrCreateFeedbackShortUrl,
@@ -8,6 +9,14 @@ import {
   matchesFeedbackTarget,
   shortenWithIsGd,
 } from '../src/server/feedbackLinks.mjs';
+
+test('buildReviewMacro generates an RP macro within WoW 255-character limit', () => {
+  const macro = buildReviewMacro('Band of the Helping Hand', 'https://is.gd/hHand1');
+  assert.match(macro, /^\/s /);
+  assert.match(macro, /Band of the Helping Hand/);
+  assert.match(macro, /https:\/\/is\.gd\/hHand1$/);
+  assert.ok(macro.length <= 255, `Macro too long: ${macro.length}`);
+});
 
 test('feedbackShortId extracts numeric Blizzard ID and preserves non-bnet IDs', () => {
   assert.equal(feedbackShortId('bnet:us:4372:4448385'), '4448385');

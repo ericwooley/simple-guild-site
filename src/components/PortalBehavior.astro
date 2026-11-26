@@ -223,6 +223,16 @@
       btn.disabled = true;
       btn.textContent = 'Shortening…';
 
+      const applyShortUrlToButton = (targetBtn: HTMLButtonElement, shortUrl: string, shortened: boolean) => {
+        const template = targetBtn.dataset.copyTemplate || '';
+        const formatted = template ? template.replace('{{URL}}', shortUrl) : shortUrl;
+        targetBtn.dataset.copyText = formatted;
+        if (shortened) delete targetBtn.dataset.shortReviewCharacter;
+        const codeEl = targetBtn.closest('.macro-item')?.querySelector<HTMLElement>('.macro-code');
+        if (codeEl) codeEl.textContent = formatted;
+        return formatted;
+      };
+
       const resolveUrl = async (): Promise<string> => {
         try {
           const result = await apiRequest(
@@ -235,9 +245,14 @@
             { silent: true }
           );
           if (result && typeof result.url === 'string' && result.url) {
-            btn.dataset.copyText = result.url;
-            if (result.shortened) delete btn.dataset.shortReviewCharacter;
-            return result.url;
+            const shortened = Boolean(result.shortened);
+            let finalText = applyShortUrlToButton(btn, result.url, shortened);
+            document.querySelectorAll<HTMLButtonElement>('[data-short-review-character]').forEach((other) => {
+              if (other !== btn && other.dataset.shortReviewCharacter === shortCharId) {
+                applyShortUrlToButton(other, result.url, shortened);
+              }
+            });
+            return finalText;
           }
         } catch {}
         return fallbackText;

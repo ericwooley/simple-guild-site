@@ -15,6 +15,13 @@ export function buildShortFeedbackUrl(origin, characterId) {
   return `${base}/fb/${encodeURIComponent(shortId)}`;
 }
 
+export function buildReviewMacro(guildName, url) {
+  const name = String(guildName || 'Band of the Helping Hand').trim();
+  const link = String(url || '').trim();
+  if (!link) return '';
+  return `/s Glad to lend a hand, traveler! If my aid served you well, I'd be honored by a kind word in the ${name} ledger: ${link}`;
+}
+
 export function matchesFeedbackTarget(member, forParam) {
   const raw = String(forParam || '').trim();
   if (!raw || !member) return false;

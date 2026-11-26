@@ -372,6 +372,12 @@ test.describe.serial('Full E2E Guild Flow (Mock Battle.net + Real Postgres + Rea
     const heroReviewBtn = gmPage.locator('.hero-actions button[data-copy-text*="/fb/"]');
     await expect(heroReviewBtn).toBeVisible();
     await expect(heroReviewBtn).toHaveAttribute('data-short-review-character', /.+/);
+    // Guild macros drawer also includes personal RP review macro with short link
+    await gmPage.locator('#guild-macros > summary').click();
+    const reviewMacro = gmPage.locator('[data-personal-review-macro]');
+    await expect(reviewMacro).toBeVisible();
+    await expect(reviewMacro.locator('.macro-code')).toContainText('/s Glad to lend a hand, traveler!');
+    await expect(reviewMacro.locator('button[data-copy-template*="{{URL}}"]')).toBeVisible();
     const [shortenResp] = await Promise.all([
       gmPage.waitForResponse(r => r.url().endsWith('/api/actions') && r.request().method() === 'POST'),
       heroReviewBtn.click(),
