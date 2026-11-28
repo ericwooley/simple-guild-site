@@ -402,6 +402,13 @@ progress.quality-legendary::-moz-progress-bar { background: #ff9c2a; }
 .activity-verb { color: #ad9e84; }
 .activity-meta { display: flex; align-items: center; gap: 12px; }
 .activity-message { margin: 0; color: #e6dac0; font: 400 14px/1.6 system-ui, sans-serif; white-space: pre-wrap; overflow-wrap: anywhere; }
+.donation-rollup-items { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.donation-rollup-more { display: contents; }
+.donation-rollup-more > summary { list-style: none; cursor: pointer; }
+.donation-rollup-more > summary::-webkit-details-marker { display: none; }
+.donation-rollup-more[open] > summary { display: none; }
+.prof-chip-more { border-color: #8a7243; color: #e8cf95; }
+.prof-chip-more:hover { border-color: #d4af55; color: #f6e1a6; }
 .inline-action { display: inline-flex; align-items: center; gap: 8px; }
 .inline-action button { padding: 4px 10px; font-size: 12px; }
 .inline-action .form-message { margin: 0; font-size: 12px; }

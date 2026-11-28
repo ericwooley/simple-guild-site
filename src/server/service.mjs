@@ -23,6 +23,7 @@ import { loadAccountCharacterProfessions, loadGuildState, saveGuildState } from 
 import { sanitizeNewsHtml, stripHtmlText } from './sanitizeHtml.mjs';
 import { fetchForeverAhSnapshot, formatCopper, importBankTransactions, loadAhPriceMap, lookupMissingVendorPrices, prefetchVendorPrices, refreshGuildTransactionPrices, resolveGuildAhContext, saveFetchedCatalogItems } from './itemPrices.mjs';
 import { getOrCreateFeedbackShortUrl } from './feedbackLinks.mjs';
+import { rollupDonationTransactions } from './activityRollup.mjs';
 const empty = () => ({account:null,guild:null,characters:[],roster:[],bank:[],bankTransactions:[],guildBankHistory:[],bankContributions:[],requests:[],professions:[],tokens:[],syncs:[],commendations:[],activityFeed:[],isGuildMaster:false,permissions:{approveBankRequests:false,assignTitles:false,manageGuildSync:false,manageAnnouncements:false},ranks:[],motd:null,guildInfo:null,news:[],macros:[],designatedBanks:[]});
 const ALL_PERMISSIONS = {approveBankRequests:true,assignTitles:true,manageGuildSync:true,manageAnnouncements:true};
 const NO_PERMISSIONS = {approveBankRequests:false,assignTitles:false,manageGuildSync:false,manageAnnouncements:false};
@@ -591,6 +592,36 @@ export async function getPortalData(request) {
     return { ...m, isGuildPrimary, alts, primaryCharacter };
   });
   const rosterIdByNorm = new Map(output.roster.map(m => [normalize(m.name), m.id]));
+  const rosterById = new Map(output.roster.map(m => [m.id, m]));
+  const resolveDonationAttribution = (rawName, rawCharId = null) => {
+    const matchedCharId = rawCharId || (rawName ? (rosterIdByNorm.get(normalize(rawName)) ?? null) : null);
+    const ownerAccountId = (matchedCharId ? accountIdByCharId.get(matchedCharId) : null)
+      ?? (rawName ? accountIdByCharNorm.get(normalize(rawName)) : null)
+      ?? null;
+    const primaryId = ownerAccountId ? (primaryByAccountId.get(ownerAccountId) ?? null) : null;
+    const primaryMember = primaryId ? (rosterById.get(primaryId) ?? null) : null;
+    if (primaryMember) {
+      return {
+        groupKey: `account:${ownerAccountId}`,
+        actorName: primaryMember.name,
+        actorCharacterId: primaryMember.id,
+      };
+    }
+    if (ownerAccountId) {
+      const accountPeers = membersByAccount.get(ownerAccountId) ?? [];
+      const fallbackMember = (matchedCharId ? rosterById.get(matchedCharId) : null) ?? accountPeers[0] ?? null;
+      return {
+        groupKey: `account:${ownerAccountId}`,
+        actorName: fallbackMember?.name || rawName,
+        actorCharacterId: fallbackMember?.id ?? matchedCharId,
+      };
+    }
+    return {
+      groupKey: `actor:${normalize(rawName) || 'unknown'}`,
+      actorName: rawName,
+      actorCharacterId: matchedCharId,
+    };
+  };
   const txRows = (await getPool().query(
     `SELECT id, tx_type AS "txType", bank_name AS "bankName", actor_name AS "actorName", item_id AS "itemId", suffix_id AS "suffixId", item_name AS "itemName", quantity, money_copper AS "moneyCopper", unit_vendor_copper AS "unitVendorCopper", total_vendor_copper::text AS "totalVendorCopper", is_donation AS "isDonation", note, occurred_at AS "occurredAt"
      FROM guild_bank_transactions
@@ -609,30 +640,40 @@ export async function getPortalData(request) {
     actorCharacterId: t.actorName ? (rosterIdByNorm.get(normalize(t.actorName)) ?? null) : null,
     occurredAt: t.occurredAt instanceof Date ? t.occurredAt.toISOString() : t.occurredAt
   }));
+  const rolledDonations = rollupDonationTransactions(
+    output.bankTransactions
+      .filter(t => t.isDonation)
+      .map(t => {
+        const attr = resolveDonationAttribution(t.actorName, t.actorCharacterId);
+        return { ...t, ...attr };
+      }),
+    { formatCopper }
+  );
   output.activityFeed = [
     ...output.commendations.map(c => ({ kind: 'commendation', ...c })),
-    ...output.bankTransactions
-      .filter(t => t.isDonation)
-      .map(t => ({ kind: 'donation', createdAt: t.occurredAt, ...t })),
+    ...rolledDonations,
     ...output.bankTransactions
       .filter(t => !t.isDonation && t.txType !== 'mailed' && Boolean(t.actorName))
       .map(t => ({ kind: 'bank', createdAt: t.occurredAt, ...t })),
-    ...output.bankContributions.filter(c => c.copper > 0).map(c => ({
-      kind: 'donation',
-      id: `contrib:${c.id}`,
-      txType: 'money-deposit',
-      bankName: 'Guild Bank',
-      actorName: c.characterName,
-      actorCharacterId: c.characterId,
-      itemName: c.reason,
-      quantity: 1,
-      moneyCopper: c.copper,
-      moneyFormatted: `${c.formatted} (${c.reason})`,
-      totalVendorCopper: c.copper,
-      vendorFormatted: c.formatted,
-      isDonation: true,
-      createdAt: c.createdAt
-    })),
+    ...output.bankContributions.filter(c => c.copper > 0).map(c => {
+      const attr = resolveDonationAttribution(c.characterName, c.characterId);
+      return {
+        kind: 'donation',
+        id: `contrib:${c.id}`,
+        txType: 'money-deposit',
+        bankName: 'Guild Bank',
+        actorName: attr.actorName,
+        actorCharacterId: attr.actorCharacterId,
+        itemName: c.reason,
+        quantity: 1,
+        moneyCopper: c.copper,
+        moneyFormatted: `${c.formatted} (${c.reason})`,
+        totalVendorCopper: c.copper,
+        vendorFormatted: c.formatted,
+        isDonation: true,
+        createdAt: c.createdAt
+      };
+    }),
     ...state.requests.filter(r => access.permissions.approveBankRequests || r.accountId === identity.id).map(r => ({
       kind: 'bank',
       id: `req:${r.id}`,

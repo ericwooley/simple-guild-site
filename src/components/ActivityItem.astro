@@ -29,7 +29,12 @@ const badgeByType: Record<string, string> = {
   'request-declined': 'Declined'
 };
 ---
-{entry.kind === 'donation' ? (
+{entry.kind === 'donation' ? (() => {
+  const rolledItems = Array.isArray(entry.items) ? entry.items : [];
+  const isRollup = entry.txType === 'donation-rollup' && (rolledItems.length > 1 || (rolledItems.length >= 1 && entry.moneyCopper > 0));
+  const previewItems = isRollup ? rolledItems.slice(0, 6) : [];
+  const extraItems = isRollup ? rolledItems.slice(6) : [];
+  return (
   <article class="activity-item">
     <div class="activity-header">
       <div class="activity-actors">
@@ -38,7 +43,13 @@ const badgeByType: Record<string, string> = {
           ? <a class="profile-link" href={`/character/${encodeURIComponent(entry.actorCharacterId)}`}><strong>{entry.actorName}</strong></a>
           : <strong>{entry.actorName}</strong>}
         <span class="activity-verb">donated</span>
-        {entry.txType === 'money-deposit'
+        {isRollup ? (
+          <>
+            {entry.quantity > 0 && <strong>{entry.quantity} {entry.quantity === 1 ? 'item' : 'items'}</strong>}
+            {entry.quantity > 0 && entry.moneyCopper > 0 && <span class="activity-verb">and</span>}
+            {entry.moneyCopper > 0 && <strong class="donation-value">{entry.moneyFormatted}</strong>}
+          </>
+        ) : entry.txType === 'money-deposit'
           ? <strong class="donation-value">{entry.moneyFormatted}</strong>
           : <><strong>{entry.itemName || `Item #${entry.itemId}`}</strong>{entry.quantity > 1 && <span class="activity-verb">×{entry.quantity}</span>}</>}
         {entry.bankName && <span class="activity-verb">to {entry.bankName}</span>}
@@ -50,8 +61,26 @@ const badgeByType: Record<string, string> = {
         <span class="data-age"><LocalTime value={entry.createdAt} /></span>
       </div>
     </div>
+    {isRollup && rolledItems.length > 0 && (
+      <div class="donation-rollup-items">
+        {previewItems.map((item: { itemName: string; quantity: number }) => (
+          <span class="prof-chip">{item.itemName}{item.quantity > 1 ? ` ×${item.quantity}` : ''}</span>
+        ))}
+        {extraItems.length > 0 && (
+          <details class="donation-rollup-more">
+            <summary class="prof-chip prof-chip-more">+{extraItems.length} more</summary>
+            <div class="donation-rollup-items">
+              {extraItems.map((item: { itemName: string; quantity: number }) => (
+                <span class="prof-chip">{item.itemName}{item.quantity > 1 ? ` ×${item.quantity}` : ''}</span>
+              ))}
+            </div>
+          </details>
+        )}
+      </div>
+    )}
   </article>
-) : entry.kind === 'bank' ? (
+  );
+})() : entry.kind === 'bank' ? (
   <article class="activity-item">
     <div class="activity-header">
       <div class="activity-actors">

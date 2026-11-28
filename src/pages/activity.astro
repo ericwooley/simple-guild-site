@@ -71,7 +71,8 @@ const entries = activityFeed.filter(entry => {
   }
   if (!query) return true;
   if (entry.kind !== 'commendation') {
-    return `${entry.actorName || ''} ${entry.itemName || ''} ${entry.bankName || ''} ${entry.txType || ''} ${entry.note || ''} ${entry.kind}`.toLowerCase().includes(query);
+    const rolledItemNames = Array.isArray(entry.items) ? entry.items.map((i: { itemName?: string }) => i.itemName || '').join(' ') : '';
+    return `${entry.actorName || ''} ${entry.itemName || ''} ${rolledItemNames} ${entry.bankName || ''} ${entry.txType || ''} ${entry.note || ''} ${entry.kind}`.toLowerCase().includes(query);
   }
   const recipientNames = (entry.recipients ?? []).map(r => r.characterName).join(' ');
   return `${recipientNames} ${entry.authorName} ${entry.message}`.toLowerCase().includes(query);
